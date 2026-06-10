@@ -1,0 +1,21 @@
+{
+  "name": "clapback",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Clapback / 嘴替: local-first AI comment comeback assistant.",
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm run test:extension",
+    "test:extension": "npm --workspace @clapback/extension test",
+    "build:extension": "npm --workspace @clapback/extension run build",
+    "dev:extension": "npm --workspace @clapback/extension run dev",
+    "legacy:test:runtime": "python -m pytest apps/runtime/tests -q",
+    "legacy:dev:runtime": "python -m uvicorn clapback_runtime.main:app --app-dir apps/runtime --host 127.0.0.1 --port 17321"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,105 @@
+@import url("https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@300;400;500;700&family=ZCOOL+KuaiLe&family=ZCOOL+XiaoWei&family=Zhi+Mang+Xing&display=swap");
+
+@font-face {
+  font-family: "Liu Jian Mao Cao";
+  src: url("/fonts/LiuJianMaoCao-Regular.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --ink-focus: #1a1a1a;
+  --ink-dense: #333333;
+  --ink-light: #666666;
+  --ink-clear: #999999;
+  --paper-xuan: #f8f5f0;
+  --paper-rice: #faf0e6;
+  --paper-ivory: #fffff0;
+  --seal-red: #c41e3a;
+  --mountain-green: #2e8b57;
+  --gold-accent: #d4af37;
+  --line-ink: rgba(26, 26, 26, 0.16);
+  --shadow-paper: 0 12px 36px rgba(26, 26, 26, 0.12);
+  --motion-fast: 150ms;
+  --motion-base: 220ms;
+  --motion-slow: 300ms;
+  --ease-ink: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-brush: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-seal: cubic-bezier(0.2, 0, 1, 1);
+  color: var(--ink-focus);
+  background: var(--paper-xuan);
+  font-family: "ZCOOL XiaoWei", "Noto Serif SC", serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-theme="dark"] {
+  --ink-focus: #e6dfd1;
+  --ink-dense: #c9bead;
+  --ink-light: #8a8278;
+  --ink-clear: #6a6258;
+  --paper-xuan: #181818;
+  --paper-rice: #2a2a2a;
+  --paper-ivory: #232220;
+  --seal-red: #e0475f;
+  --mountain-green: #6fbe8e;
+  --gold-accent: #d4af37;
+  --line-ink: rgba(248, 245, 240, 0.22);
+  --shadow-paper: 0 16px 42px rgba(0, 0, 0, 0.36);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select, textarea { font: inherit; }
+
+.paper-surface {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(26, 26, 26, 0.035), transparent 22%),
+    radial-gradient(circle at 82% 72%, rgba(196, 30, 58, 0.035), transparent 24%),
+    linear-gradient(135deg, var(--paper-xuan), var(--paper-ivory));
+}
+
+[data-theme="dark"] .paper-surface {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(248, 245, 240, 0.04), transparent 22%),
+    radial-gradient(circle at 82% 72%, rgba(224, 71, 95, 0.06), transparent 24%),
+    linear-gradient(135deg, var(--paper-xuan), var(--paper-rice));
+}
+
+.workbench-shell {
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  color: var(--ink-focus);
+}
+
+.workbench-main {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  padding: 64px;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 1023px) {
+  .workbench-main { padding: 40px 32px; gap: 32px; }
+}
+
+@media (max-width: 767px) {
+  .workbench-shell { grid-template-columns: 1fr; height: auto; overflow: visible; }
+  .workbench-main { padding: 24px 16px; gap: 24px; overflow-y: visible; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,328 @@
+.corpus-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.corpus-card__desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-light);
+  line-height: 1.55;
+}
+
+.corpus-back {
+  align-self: flex-start;
+}
+
+.corpus-modal__hint {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-dense);
+  line-height: 1.55;
+}
+
+.import-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.import-tabs__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line-ink);
+  border-radius: 8px;
+  background: var(--paper-ivory);
+  font-family: "Noto Serif SC", serif;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-ink),
+              background var(--motion-fast) var(--ease-ink);
+}
+
+[data-theme="dark"] .import-tabs__item { background: rgba(35, 34, 32, 0.96); }
+
+.import-tabs__item:hover { border-color: var(--seal-red); }
+
+.import-tabs__item--active {
+  border-color: var(--seal-red);
+  background: rgba(196, 30, 58, 0.06);
+}
+
+.import-tabs__item svg { color: var(--seal-red); margin-top: 2px; flex-shrink: 0; }
+
+.import-tabs__item div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.import-tabs__item strong {
+  font-size: 15px;
+  color: var(--ink-focus);
+  font-weight: 500;
+}
+
+.import-tabs__item span {
+  font-size: 12px;
+  color: var(--ink-light);
+}
+
+.entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.entry-quote {
+  border: 1px solid var(--line-ink);
+  border-left: 3px solid var(--seal-red);
+  border-radius: 0 8px 8px 0;
+  background: rgba(255, 255, 240, 0.62);
+  padding: 16px 20px;
+}
+
+[data-theme="dark"] .entry-quote { background: rgba(42, 42, 42, 0.62); }
+
+.entry-quote blockquote {
+  margin: 0 0 8px;
+  font-family: "Noto Serif SC", serif;
+  font-size: 14px;
+  color: var(--ink-dense);
+  line-height: 1.7;
+}
+
+.entry-quote footer {
+  font-size: 12px;
+  color: var(--ink-light);
+}
+
+.crawl-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 32px;
+}
+
+@media (max-width: 1023px) {
+  .crawl-layout { grid-template-columns: 1fr; }
+}
+
+.crawl-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--line-ink);
+  border-radius: 8px;
+  background: rgba(255, 255, 240, 0.62);
+}
+
+[data-theme="dark"] .crawl-form { background: rgba(42, 42, 42, 0.62); }
+
+.crawl-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--seal-red);
+}
+
+.corpus-paste-field {
+  min-height: 156px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.corpus-import-summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-light);
+}
+
+.corpus-cookie-field {
+  min-height: 88px;
+  resize: vertical;
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+.crawl-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--line-ink);
+  border-radius: 8px;
+  background: var(--paper-ivory);
+}
+
+[data-theme="dark"] .crawl-progress { background: rgba(35, 34, 32, 0.96); }
+
+.crawl-progress__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-focus);
+}
+
+.crawl-progress__hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-light);
+}
+
+.crawl-empty-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--line-ink);
+  border-radius: 8px;
+  background: var(--paper-ivory);
+}
+
+[data-theme="dark"] .crawl-empty-guide {
+  background: rgba(35, 34, 32, 0.96);
+}
+
+.crawl-empty-guide__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.crawl-empty-guide__head svg {
+  flex: 0 0 auto;
+  color: var(--mountain-green);
+}
+
+.crawl-empty-guide__copy,
+.crawl-empty-guide__step div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.crawl-empty-guide__copy strong {
+  color: var(--ink-focus);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.crawl-empty-guide__copy span {
+  color: var(--ink-light);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.crawl-empty-guide__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.crawl-empty-guide__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.crawl-empty-guide__number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(196, 30, 58, 0.28);
+  border-radius: 999px;
+  background: rgba(196, 30, 58, 0.08);
+  color: var(--seal-red);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+[data-theme="dark"] .crawl-empty-guide__number {
+  border-color: rgba(224, 71, 95, 0.42);
+  background: rgba(224, 71, 95, 0.16);
+}
+
+.crawl-empty-guide__step strong {
+  color: var(--ink-focus);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.crawl-empty-guide__step span {
+  color: var(--ink-light);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.crawl-progress__stat {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.crawl-progress__count {
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--seal-red);
+  font-family: "ZCOOL XiaoWei", serif;
+}
+
+.crawl-progress__total {
+  font-size: 14px;
+  color: var(--ink-light);
+  margin-right: 8px;
+}
+
+.crawl-progress__bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(196, 30, 58, 0.12);
+  overflow: hidden;
+}
+
+.crawl-progress__bar-fill {
+  height: 100%;
+  background: var(--seal-red);
+  transition: width var(--motion-base) var(--ease-ink);
+}
+
+.crawl-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.crawl-job-details {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px 12px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-light);
+}
+
+.crawl-job-details dt,
+.crawl-job-details dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.crawl-job-details dt {
+  color: var(--ink-dense);
+  font-weight: 500;
+}
+
+.crawl-job-details dd {
+  overflow-wrap: anywhere;
+}

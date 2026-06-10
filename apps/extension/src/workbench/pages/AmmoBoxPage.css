@@ -1,0 +1,69 @@
+.ammo-page__subnav {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.ammo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1023px) {
+  .ammo-grid { grid-template-columns: 1fr; }
+}
+
+.ammo-card__chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ammo-back { align-self: flex-start; }
+
+.ammo-stat {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-light);
+}
+
+.ammo-entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ammo-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--line-ink);
+  border-radius: 8px;
+  background: rgba(255, 255, 240, 0.62);
+}
+
+[data-theme="dark"] .ammo-entry { background: rgba(42, 42, 42, 0.62); }
+
+.ammo-entry > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ammo-entry__term {
+  margin: 0;
+  font-family: "Noto Serif SC", serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-focus);
+}
+
+.ammo-entry__desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-dense);
+  line-height: 1.65;
+}

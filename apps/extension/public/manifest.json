@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "Clapback / 嘴替",
+  "short_name": "Clapback",
+  "version": "0.1.0",
+  "description": "Lock Zhihu/Weibo/Xiaohongshu comments and generate sharp reply candidates without auto-publishing.",
+  "action": {
+    "default_title": "Clapback / 嘴替"
+  },
+  "background": {
+    "service_worker": "assets/background.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "index.html",
+    "open_in_tab": true
+  },
+  "permissions": ["storage", "scripting"],
+  "host_permissions": [
+    "https://www.zhihu.com/*",
+    "https://zhuanlan.zhihu.com/*",
+    "https://weibo.com/*",
+    "https://www.weibo.com/*",
+    "https://m.weibo.cn/*",
+    "https://www.xiaohongshu.com/*",
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "https://api.deepseek.com/*",
+    "https://api.moonshot.cn/*"
+  ],
+  "optional_host_permissions": ["https://*/*"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.zhihu.com/*",
+        "https://zhuanlan.zhihu.com/*",
+        "https://weibo.com/*",
+        "https://www.weibo.com/*",
+        "https://m.weibo.cn/*",
+        "https://www.xiaohongshu.com/*"
+      ],
+      "js": ["assets/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["fonts/*"],
+      "matches": [
+        "https://www.zhihu.com/*",
+        "https://zhuanlan.zhihu.com/*",
+        "https://weibo.com/*",
+        "https://www.weibo.com/*",
+        "https://m.weibo.cn/*",
+        "https://www.xiaohongshu.com/*"
+      ]
+    }
+  ]
+}
