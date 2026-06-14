@@ -103,7 +103,7 @@ export type ExtensionRequestMap = {
   "collection:endSession": { payload: { sessionId: string }; response: void };
   "skills:list": { payload: undefined; response: SkillInfo[] };
   "skills:getDetail": { payload: { skillId: string }; response: SkillDetail };
-  "skills:compile": { payload: { files: Record<string, string>; skillId?: string }; response: { ok: boolean; skill?: SkillInfo; errors?: string[] } };
+  "skills:compile": { payload: { files: Record<string, string>; skillId?: string; require_samples?: boolean }; response: { ok: boolean; skill?: SkillInfo; errors?: string[] } };
   "skills:createDraft": {
     payload: { source_box_ids: number[]; skill_name: string; skill_goal: string };
     response: SkillDraft;
@@ -114,6 +114,10 @@ export type ExtensionRequestMap = {
   };
   "skills:applyFeedback": { payload: { draftId: number; feedback: string; tags: string[] }; response: SkillDraft };
   "skills:publish": { payload: { draftId: number; accepted_tryout_ids?: number[] }; response: SkillInfo & { stability_warning?: string } };
+  "skills:rateTryout": {
+    payload: { tryoutId: number; rating: "accepted" | "rejected" | null; rejectionReason?: string; annotation?: string };
+    response: SkillTryoutResult;
+  };
   "ammo:listBoxes": { payload: undefined; response: AmmoBoxSummary[] };
   "ammo:createBox": { payload: { name: string; category: AmmoCategory; description: string }; response: AmmoBoxSummary };
   "ammo:listEntries": { payload: { boxId: number }; response: AmmoEntry[] };

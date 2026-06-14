@@ -14,7 +14,6 @@ export type LengthConstraint = {
 export const CUSTOM_LENGTH_MODE = "自定义";
 export const CUSTOM_LENGTH_DEFAULT_TARGET = 20;
 export const CUSTOM_LENGTH_MAX_CHARS = 200;
-export const LENGTH_OPTIONS = ["10字以内", "20字以内", "30字以内", "短", "中", "展开", CUSTOM_LENGTH_MODE] as const;
 
 const PRESET_LENGTH_CONSTRAINTS: Record<string, LengthConstraint> = {
   "10字以内": { label: "不超过 10 个汉字", maxChars: 10 },
@@ -56,6 +55,53 @@ export function trimToMaxChars(value: string, maxChars: number): string {
   const chars = [...value.trim()];
   if (chars.length <= maxChars) return chars.join("");
   return chars.slice(0, Math.max(0, maxChars)).join("").replace(/[，。！？、,.!?；;：:]+$/g, "").trim();
+}
+
+export function isWithinLengthConstraint(value: string, constraint: LengthConstraint): boolean {
+  const length = [...value.trim()].length;
+  if (length === 0 || length > constraint.maxChars) return false;
+  return constraint.minChars === undefined || length >= constraint.minChars;
+}
+
+export function fitToLengthConstraint(
+  value: string,
+  constraint: LengthConstraint,
+  paddingSegments: string[] = DEFAULT_LENGTH_PADDING_SEGMENTS,
+): string {
+  let result = trimToMaxChars(value, constraint.maxChars);
+  if (constraint.minChars === undefined || [...result].length >= constraint.minChars) return result;
+
+  for (const segment of paddingSegments) {
+    result = appendWithinMax(result, segment, constraint.maxChars);
+    if ([...result].length >= constraint.minChars) return result;
+  }
+
+  while ([...result].length < constraint.minChars) {
+    const next = appendWithinMax(result, "再把证据和前提补齐", constraint.maxChars);
+    if (next === result) break;
+    result = next;
+  }
+  return result;
+}
+
+const DEFAULT_LENGTH_PADDING_SEGMENTS = [
+  "先把证据补上",
+  "再说明前提",
+  "否则只是情绪判断",
+  "结论站不稳",
+];
+
+function appendWithinMax(base: string, segment: string, maxChars: number): string {
+  const cleanBase = base.trim();
+  const cleanSegment = segment.trim();
+  if (!cleanSegment) return cleanBase;
+  const separator = cleanBase && !/[，。！？、,.!?；;：:]$/.test(cleanBase) ? "，" : "";
+  const remaining = maxChars - [...cleanBase].length;
+  if (remaining <= 0) return cleanBase;
+  const segmentBudget = remaining - [...separator].length;
+  if (segmentBudget <= 0) return cleanBase;
+  const fittingSegment = [...cleanSegment].slice(0, segmentBudget).join("");
+  return `${cleanBase}${separator}${fittingSegment}`;
 }
 
 function clampInteger(value: unknown, min: number, max: number): number | undefined {

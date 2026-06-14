@@ -749,7 +749,7 @@ export function normalizeSkillDetailForRead(record: Partial<SkillRecord> & { id:
   };
 }
 
-export async function compileSkill(files: Record<string, string>, skillId?: string) {
+export async function compileSkill(files: Record<string, string>, skillId?: string, requireSamples = false) {
   const rejected = findExecutableSkillFiles(files);
   if (rejected.length > 0) {
     return { ok: false, errors: rejected.map((name) => `Executable files are not allowed in Skill packages: ${name}`) };
@@ -767,7 +767,7 @@ export async function compileSkill(files: Record<string, string>, skillId?: stri
   if (skillId && !provisionalExisting) {
     return { ok: false, errors: [`Skill not found: ${skillId}`] };
   }
-  const packageErrors = validateSkillPackageFiles(files);
+  const packageErrors = validateSkillPackageFiles(files, { requireSamples });
   if (packageErrors.length > 0) return { ok: false, errors: packageErrors };
   const manifest = parseJsonRecord(files["manifest.json"]) ?? {};
   const manifestId = String(manifest.id).trim();
@@ -843,6 +843,25 @@ export async function runSkillTryout(
   return result;
 }
 
+export async function rateSkillTryout(
+  tryoutId: number,
+  rating: "accepted" | "rejected" | null,
+  rejectionReason?: string,
+  annotation?: string,
+): Promise<SkillTryoutResult> {
+  const record = await getRecord("skillTryouts", tryoutId);
+  if (!record) throw new Error("tryout_not_found");
+  const updated: SkillTryoutRecord = {
+    ...record,
+    user_rating: rating,
+    rejection_reason: rejectionReason,
+    user_annotation: annotation,
+  };
+  await putRecord("skillTryouts", updated);
+  const { draft_id: _draftId, created_at: _created, ...result } = updated;
+  return result;
+}
+
 export async function applySkillFeedback(draftId: number, feedback: string, tags: string[]): Promise<SkillDraft> {
   const draft = await getRecord("skillDrafts", draftId);
   if (!draft) throw new Error("draft_not_found");
@@ -873,17 +892,20 @@ export async function applySkillFeedback(draftId: number, feedback: string, tags
 export async function publishSkillDraft(draftId: number, acceptedTryoutIds: number[] = []): Promise<SkillInfo & { stability_warning?: string }> {
   const draft = await getRecord("skillDrafts", draftId);
   if (!draft) throw new Error("draft_not_found");
-  const packageErrors = validateSkillPackageFiles(draft.files, { requireSamples: true });
+  const sampleOutputs = mergeSampleOutputs(
+    parseSampleOutputs(draft.files["sample_outputs.json"]),
+    await listAcceptedTryoutSamples(draftId, acceptedTryoutIds, draft.draft_version),
+  );
+  if (sampleOutputs.length < 2) {
+    throw new Error("skill_creator_publish_blocked:sample_outputs.json must contain at least 2 usable samples after merging accepted tryouts");
+  }
+  const packageErrors = validateSkillPackageFiles(draft.files, { requireSamples: false });
   if (packageErrors.length > 0) {
     throw new Error(`skill_creator_publish_blocked:${packageErrors.join(",")}`);
   }
   const manifest = parseJsonRecord(draft.files["manifest.json"]) ?? {};
   const id = `draft-${draft.id}`;
   const timestamp = nowIso();
-  const sampleOutputs = mergeSampleOutputs(
-    parseSampleOutputs(draft.files["sample_outputs.json"]),
-    await listAcceptedTryoutSamples(draftId, acceptedTryoutIds, draft.draft_version),
-  );
   const files: Record<string, string> = {
     ...draft.files,
     "sample_outputs.json": JSON.stringify(sampleOutputs, null, 2),
@@ -922,7 +944,11 @@ async function createDraftFilesFromModel(
   sourceBoxIds: number[],
   rebuild?: { previousFiles: Record<string, string>; tryouts: SkillTryoutResult[]; feedback: string; tags: string[] },
 ): Promise<Record<string, string>> {
-  const [model, apiKey] = await Promise.all([getDefaultModelConfig(), getRawApiKey()]);
+  const [model, apiKey, skillCreatorSkill] = await Promise.all([
+    getDefaultModelConfig(),
+    getRawApiKey(),
+    getSkillDetail("skill_creator").catch(() => undefined),
+  ]);
   if (!model || !apiKey) throw new Error("skill_creator_model_required");
 
   const entries = (await Promise.all(sourceBoxIds.map((boxId) => listCorpusEntries(boxId).catch(() => [])))).flat();
@@ -938,11 +964,12 @@ async function createDraftFilesFromModel(
     tryouts: rebuild?.tryouts,
     feedback: rebuild?.feedback,
     tags: rebuild?.tags,
+    skillCreatorSkill,
   }).catch((error) => {
     throw new Error(skillCreatorModelErrorCode(error));
   });
   const files = skillGenerationToFiles(generated, sourceBoxIds, { skillName, skillGoal });
-  const packageErrors = validateSkillPackageFiles(files, { requireSamples: true });
+  const packageErrors = validateSkillPackageFiles(files, { requireSamples: false });
   if (packageErrors.length > 0) throw new Error(`skill_creator_invalid_output:${packageErrors.join(",")}`);
   return files;
 }
@@ -981,6 +1008,8 @@ function skillCreatorModelErrorCode(error: unknown): string {
   if (raw === "model_api_key_missing") return "skill_creator_model_required";
   if (raw === "model_name_missing") return "skill_creator_model_name_missing";
   if (raw === "model_base_url_not_allowed") return "skill_creator_model_base_url_invalid";
+  if (raw === "model_request_timeout") return "skill_creator_model_timeout";
+  if (raw === "model_output_truncated") return "skill_creator_model_output_truncated";
 
   const status = typeof (error as { status?: unknown } | null)?.status === "number"
     ? (error as { status: number }).status
@@ -1003,7 +1032,12 @@ function parseSampleOutputs(value: string | undefined): SkillDetail["sample_outp
         reply: typeof item.reply === "string" ? item.reply : typeof item.output === "string" ? item.output : undefined,
         input: typeof item.input === "string" ? item.input : undefined,
         output: typeof item.output === "string" ? item.output : undefined,
-      }));
+      }))
+      .filter((sample) => {
+        const prompt = sample.prompt ?? sample.input ?? "";
+        const reply = sample.reply ?? sample.output ?? "";
+        return prompt.trim() !== "" && reply.trim() !== "";
+      });
   } catch {
     return [];
   }
@@ -1019,6 +1053,7 @@ async function listAcceptedTryoutSamples(
   return (await queryByIndex("skillTryouts", "draft_id", draftId))
     .filter((tryout) => accepted.has(tryout.id))
     .filter((tryout) => tryout.draft_version === draftVersion)
+    .filter((tryout) => tryout.user_utterance.trim() !== "" && tryout.reply.trim() !== "")
     .map((tryout) => ({
       prompt: tryout.user_utterance,
       reply: tryout.reply,
@@ -1081,6 +1116,11 @@ function validateSkillPackageFiles(files: Record<string, string>, options: { req
   const taxonomy = attackPlaybook?.taxonomy;
   if (!isPlainObject(taxonomy) || Object.keys(taxonomy).sort().join("|") !== ATTACK_TAXONOMY.slice().sort().join("|")) {
     errors.push("attack_playbook.json must define the fixed 8-class taxonomy");
+  } else if (!ATTACK_TAXONOMY.every((key) => {
+    const value = taxonomy[key];
+    return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+  })) {
+    errors.push("attack_playbook.json taxonomy values must be numbers between 0 and 1");
   }
   if (options.requireSamples) {
     const samples = parseSampleOutputs(files["sample_outputs.json"]);

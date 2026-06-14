@@ -15,7 +15,11 @@ type ModelTextRequest = {
   user: string;
   maxTokens?: number;
   temperature?: number;
+  timeoutMs?: number;
+  responseFormat?: "json_object";
 };
+
+const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 60_000;
 
 class ModelRequestError extends Error {
   readonly status?: number;
@@ -134,17 +138,18 @@ async function requestOpenAiChat(
     ],
     temperature: request.temperature,
     max_tokens: request.maxTokens,
+    response_format: request.responseFormat === "json_object" ? { type: "json_object" } : undefined,
     n: 1,
     stream: false,
   });
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetchWithModelTimeout(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
-  });
+  }, request.timeoutMs);
   const payload = await readResponseBody(response);
   if (!response.ok) throw new ModelRequestError(providerErrorMessage(payload, response.status), response.status);
   return extractOpenAiText(payload);
@@ -163,7 +168,7 @@ async function requestAnthropicMessages(
     temperature: request.temperature,
     max_tokens: request.maxTokens ?? 512,
   });
-  const response = await fetch(`${baseUrl}/messages`, {
+  const response = await fetchWithModelTimeout(`${baseUrl}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -171,7 +176,7 @@ async function requestAnthropicMessages(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify(body),
-  });
+  }, request.timeoutMs);
   const payload = await readResponseBody(response);
   if (!response.ok) throw new ModelRequestError(providerErrorMessage(payload, response.status), response.status);
   return extractAnthropicText(payload);
@@ -197,7 +202,17 @@ function extractOpenAiText(payload: unknown): string {
   const first = payload.choices[0];
   if (!isPlainObject(first)) return "";
   const message = first.message;
-  if (isPlainObject(message) && typeof message.content === "string") return message.content;
+  if (isPlainObject(message) && typeof message.content === "string") {
+    if (
+      message.content.trim() === "" &&
+      first.finish_reason === "length" &&
+      typeof message.reasoning_content === "string" &&
+      message.reasoning_content.trim() !== ""
+    ) {
+      throw new ModelRequestError("model_output_truncated");
+    }
+    return message.content;
+  }
   return typeof first.text === "string" ? first.text : "";
 }
 
@@ -259,6 +274,40 @@ function providerErrorMessage(body: unknown, status: number): string {
   }
   if (typeof body === "string" && body.trim()) return redactSecret(body.trim().slice(0, 240));
   return `model_request_failed_${status}`;
+}
+
+async function fetchWithModelTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs = DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<Response>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new ModelRequestError("model_request_timeout"));
+    }, Math.max(1, timeoutMs));
+  });
+  try {
+    return await Promise.race([
+      fetch(url, { ...init, signal: controller.signal }),
+      timeout,
+    ]);
+  } catch (error) {
+    if (controller.signal.aborted || isAbortError(error)) {
+      throw new ModelRequestError("model_request_timeout");
+    }
+    throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
 }
 
 function modelFailure(error: unknown): { ok: false; error: string; status?: number } {

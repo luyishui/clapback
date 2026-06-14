@@ -28,6 +28,7 @@ import {
   listModels,
   listSkills,
   publishSkillDraft,
+  rateSkillTryout,
   removeCollectionCandidate,
   runSkillTryout,
   saveModel,
@@ -123,7 +124,10 @@ export async function handleExtensionMessage<T extends ExtensionMessageType>(
       return getSkillDetail(requireNonEmptyString(payload, "skillId")) as Promise<ExtensionRequestMap[T]["response"]>;
     case "skills:compile": {
       const skillId = optionalString(payload, "skillId");
-      return compileSkill(requireFiles(payload), skillId) as Promise<ExtensionRequestMap[T]["response"]>;
+      const requireSamples = typeof (payload as { require_samples?: boolean }).require_samples === "boolean"
+        ? (payload as { require_samples: boolean }).require_samples
+        : false;
+      return compileSkill(requireFiles(payload), skillId, requireSamples) as Promise<ExtensionRequestMap[T]["response"]>;
     }
     case "skills:createDraft":
       return createSkillDraft(payload as Parameters<typeof createSkillDraft>[0]) as Promise<ExtensionRequestMap[T]["response"]>;
@@ -150,6 +154,15 @@ export async function handleExtensionMessage<T extends ExtensionMessageType>(
           ? (payload as { accepted_tryout_ids: unknown[] }).accepted_tryout_ids.filter((id): id is number => typeof id === "number" && Number.isFinite(id))
           : [],
       ) as Promise<ExtensionRequestMap[T]["response"]>;
+    case "skills:rateTryout": {
+      const data = payload as { tryoutId: number; rating: "accepted" | "rejected" | null; rejectionReason?: string; annotation?: string };
+      return rateSkillTryout(
+        requireNumber(data, "tryoutId"),
+        data.rating ?? null,
+        data.rejectionReason,
+        data.annotation,
+      ) as Promise<ExtensionRequestMap[T]["response"]>;
+    }
     case "ammo:listBoxes":
       return listAmmoBoxes() as Promise<ExtensionRequestMap[T]["response"]>;
     case "ammo:createBox":

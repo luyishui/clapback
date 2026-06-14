@@ -1,0 +1,82 @@
+.bamboo-indicator {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bamboo-node {
+  width: 12px;
+  height: 28px;
+  background: transparent;
+  border: 2px solid rgba(26, 26, 26, 0.15);
+  border-radius: 3px;
+  position: relative;
+  transition: none; /* GSAP接管所有动画 */
+}
+
+/* 竹节横线（节点标记） */
+.bamboo-segment::before,
+.bamboo-segment::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.4;
+}
+
+.bamboo-segment::before {
+  top: 30%;
+}
+
+.bamboo-segment::after {
+  top: 70%;
+}
+
+/* 竹叶容器 */
+.bamboo-leaves {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.bamboo-leaf {
+  position: absolute;
+  width: 8px;
+  height: 14px;
+  background: var(--mountain-green);
+  border-radius: 50% 0;
+  opacity: 0;
+  transform-origin: bottom center;
+  will-change: transform, opacity;
+}
+
+.bamboo-leaf--left {
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-25deg);
+}
+
+.bamboo-leaf--right {
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%) rotate(25deg) scaleX(-1);
+}
+
+/* 失败状态：断裂效果 */
+.bamboo-cracked::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120%;
+  height: 2px;
+  background: var(--seal-red);
+  transform: translate(-50%, -50%) rotate(-8deg);
+  opacity: 0.6;
+  box-shadow: 0 0 4px rgba(196, 30, 58, 0.4);
+}

@@ -144,6 +144,9 @@ export type SkillTryoutResult = {
   reply: string;
   degraded?: boolean;
   degraded_reason?: string;
+  user_rating?: "accepted" | "rejected" | null;
+  rejection_reason?: string;
+  user_annotation?: string;
 };
 
 const collectionJobSessions = new Map<number, { sessionId: string; tabId?: number; boxId: number; platform: string; requestedCount: number; createdAt?: string }>();
@@ -336,4 +339,11 @@ export const runtimeApi = {
 
   publishSkillDraft: (draftId: number, data: { accepted_tryout_ids: number[] }) =>
     sendExtensionMessage("skills:publish", { draftId, ...data }),
+
+  rateTryout: (tryoutId: number, data: {
+    rating: "accepted" | "rejected" | null;
+    rejectionReason?: string;
+    annotation?: string;
+  }) =>
+    sendExtensionMessage("skills:rateTryout", { tryoutId, ...data }),
 };

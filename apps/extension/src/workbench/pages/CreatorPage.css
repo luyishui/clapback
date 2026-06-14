@@ -94,6 +94,55 @@
   font-size: 11px;
 }
 
+.tryout-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  margin-left: 16px;
+  flex-wrap: wrap;
+}
+
+.tryout-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line-ink);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-dense);
+  font-family: "Noto Serif SC", serif;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-ink),
+              background var(--motion-fast) var(--ease-ink),
+              color var(--motion-fast) var(--ease-ink);
+}
+
+.tryout-action:hover {
+  border-color: var(--seal-red);
+  background: rgba(196, 30, 58, 0.04);
+}
+
+.tryout-action--active {
+  border-color: var(--seal-red);
+  color: var(--seal-red);
+  background: rgba(196, 30, 58, 0.08);
+}
+
+.tryout-meta {
+  font-size: 11px;
+  color: var(--ink-light);
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .tryout-meta {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 [data-theme="dark"] .chat-bubble--assistant {
   background: rgba(35, 34, 32, 0.96);
 }
@@ -343,35 +392,29 @@
 .creator-stage-list__item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 20px;
+  gap: 12px;
+  min-height: 32px;
   color: var(--ink-light);
   font-size: 12px;
   line-height: 1.4;
 }
 
-.creator-stage-list__item--active {
-  color: var(--ink-focus);
+.creator-stage-list__text {
+  font-family: "ZCOOL XiaoWei", serif;
+  color: var(--ink-dense);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.creator-stage-list__item--done {
-  color: var(--ink);
-}
-
+/* 移除旧的圆点样式，已被BambooStageIndicator替换 */
 .creator-stage-list__dot {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 7px;
-  border-radius: 50%;
-  background: var(--line-ink);
+  display: none;
 }
 
-.creator-stage-list__item--active .creator-stage-list__dot {
-  background: var(--seal-red);
-}
-
-.creator-stage-list__item--done .creator-stage-list__dot {
-  background: var(--ink-focus);
+.creator-stage-list__status {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--seal-red);
 }
 
 .creator-error {
@@ -388,4 +431,80 @@
 .creator-sidebar__stat {
   font-size: 13px;
   color: var(--ink-light);
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(26, 26, 26, 0.54);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-dialog {
+  background: var(--paper-ivory);
+  border: 1px solid var(--line-ink);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 8px 24px rgba(26, 26, 26, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+[data-theme="dark"] .modal-dialog {
+  background: rgba(35, 34, 32, 0.96);
+}
+
+.modal-dialog__title {
+  margin: 0;
+  font-family: "Noto Serif SC", serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink-focus);
+}
+
+.modal-dialog__reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-dialog__reason-btn {
+  padding: 12px 16px;
+  border: 1px solid var(--line-ink);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-dense);
+  font-family: "Noto Serif SC", serif;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-ink),
+              background var(--motion-fast) var(--ease-ink);
+}
+
+.modal-dialog__reason-btn:hover {
+  border-color: var(--seal-red);
+  background: rgba(196, 30, 58, 0.04);
+}
+
+.modal-dialog__textarea {
+  min-height: 96px;
+  resize: vertical;
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+.modal-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }

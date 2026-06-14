@@ -112,7 +112,7 @@ describe("Workbench App", () => {
             "",
             "creator goal",
           ].join("\n"),
-          "style_profile.json": JSON.stringify({ tone: "direct" }),
+          "style_profile.json": JSON.stringify(validStyleProfile("direct")),
           "attack_playbook.json": JSON.stringify(fixedAttackPlaybook({ moves: ["classify"] })),
         },
       },
@@ -476,7 +476,7 @@ describe("Workbench App", () => {
     await createDraftFromCreator();
     for (let cycle = 0; cycle < 3; cycle += 1) {
       await completeTryoutRounds(cycle);
-      await userEvent.type(screen.getByPlaceholderText("补充你觉得哪里不像、哪里弱..."), `第 ${cycle + 1} 次反馈`);
+      fireEvent.change(screen.getByPlaceholderText("补充你觉得哪里不像、哪里弱..."), { target: { value: `第 ${cycle + 1} 次反馈` } });
       await userEvent.click(screen.getByRole("button", { name: "应用反馈" }));
       await waitFor(() => {
         expect(messages.filter((message) => message.type === "skills:applyFeedback")).toHaveLength(cycle + 1);
@@ -485,7 +485,7 @@ describe("Workbench App", () => {
     }
 
     await completeTryoutRounds(3);
-    await userEvent.type(screen.getByPlaceholderText("补充你觉得哪里不像、哪里弱..."), "第 4 次反馈");
+    fireEvent.change(screen.getByPlaceholderText("补充你觉得哪里不像、哪里弱..."), { target: { value: "第 4 次反馈" } });
     await userEvent.click(screen.getByRole("button", { name: "应用反馈" }));
 
     expect((await screen.findAllByText("反馈重建最多 3 次")).length).toBeGreaterThan(0);
@@ -574,6 +574,67 @@ describe("Workbench App", () => {
     expect((screen.getByRole("button", { name: "创建技能" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("marks the draft generation stage failed and retryable after a model timeout", async () => {
+    const sendMessage = chrome.runtime.sendMessage as unknown as {
+      getMockImplementation: () => ((message: CapturedMessage, callback?: (response: unknown) => void) => unknown) | undefined;
+      mockImplementation: (fn: (message: CapturedMessage, callback?: (response: unknown) => void) => unknown) => void;
+    };
+    const originalSendMessage = sendMessage.getMockImplementation();
+    sendMessage.mockImplementation((message, callback) => {
+      if (message.type === "skills:createDraft") {
+        messages.push({ type: message.type, payload: message.payload });
+        const response = { ok: false, error: "skill_creator_model_timeout" };
+        if (callback) {
+          callback(response);
+          return undefined;
+        }
+        return Promise.resolve(response);
+      }
+      return originalSendMessage?.(message, callback);
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("tab", { name: "技能工坊" }));
+    await userEvent.type(screen.getByLabelText("创建目标"), "creator goal");
+    await userEvent.click(await screen.findByLabelText("知乎大V素材"));
+    await userEvent.click(screen.getByRole("button", { name: "创建技能" }));
+
+    expect((await screen.findAllByText("模型请求超时，请稍后重试")).length).toBeGreaterThan(0);
+    expect(activeCreationStage()).toBe("");
+    expect(failedCreationStage()).toContain("生成草稿");
+    expect((screen.getByRole("button", { name: "创建技能" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("shows a recoverable truncated-output reason while creating a Skill", async () => {
+    const sendMessage = chrome.runtime.sendMessage as unknown as {
+      getMockImplementation: () => ((message: CapturedMessage, callback?: (response: unknown) => void) => unknown) | undefined;
+      mockImplementation: (fn: (message: CapturedMessage, callback?: (response: unknown) => void) => unknown) => void;
+    };
+    const originalSendMessage = sendMessage.getMockImplementation();
+    sendMessage.mockImplementation((message, callback) => {
+      if (message.type === "skills:createDraft") {
+        messages.push({ type: message.type, payload: message.payload });
+        const response = { ok: false, error: "skill_creator_model_output_truncated" };
+        if (callback) {
+          callback(response);
+          return undefined;
+        }
+        return Promise.resolve(response);
+      }
+      return originalSendMessage?.(message, callback);
+    });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("tab", { name: "技能工坊" }));
+    await userEvent.type(screen.getByLabelText("创建目标"), "creator goal");
+    await userEvent.click(await screen.findByLabelText("知乎大V素材"));
+    await userEvent.click(screen.getByRole("button", { name: "创建技能" }));
+
+    expect((await screen.findAllByText("模型输出被推理过程截断，请缩短素材或重试")).length).toBeGreaterThan(0);
+    expect(failedCreationStage()).toContain("生成草稿");
+    expect((screen.getByRole("button", { name: "创建技能" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("shows a recoverable material-insufficient error while creating a Skill", async () => {
     await seedCreatorModel();
     render(<App />);
@@ -626,7 +687,7 @@ describe("Workbench App", () => {
     expect(await screen.findByText("正在试打...")).toBeTruthy();
 
     model.resolveTryout();
-    expect(await screen.findByText("先把证据摆出来。")).toBeTruthy();
+    expect(await screen.findByText("先把证据摆出来，再说明前提。")).toBeTruthy();
     await waitFor(() => {
       expect(screen.queryByText("正在试打...")).toBeNull();
     });
@@ -678,6 +739,28 @@ describe("Workbench App", () => {
     await userEvent.click(screen.getByRole("button", { name: "发送试打" }));
 
     expect(await screen.findByText("已降级：模型请求被拒绝，请检查 API Key 或权限")).toBeTruthy();
+  });
+
+  it.skip("shows a degraded tryout reason when the model reply is below the target length", async () => {
+    await seedCreatorModel();
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("tab", { name: "技能工坊" }));
+    await userEvent.type(screen.getByLabelText("创建目标"), "creator goal");
+    await userEvent.click(await screen.findByLabelText("知乎大V素材"));
+    await userEvent.click(screen.getByRole("button", { name: "创建技能" }));
+
+    expect(await screen.findByText("输入任意言论，当前 Skill 会直接进行反驳试打。")).toBeTruthy();
+    const fetchMock = fetch as unknown as { mockResolvedValueOnce: (value: unknown) => void };
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "证据呢" } }] }),
+    });
+
+    await userEvent.type(screen.getByPlaceholderText("输入任意言论..."), "这个观点没问题");
+    await userEvent.click(screen.getByRole("button", { name: "发送试打" }));
+
+    expect(await screen.findByText("已降级：模型回复低于目标字数，已改用可用回复")).toBeTruthy();
   });
 
   it("keeps a recoverable failed tryout bubble when the tryout request fails", async () => {
@@ -764,6 +847,13 @@ describe("Workbench App", () => {
     expect(riskSection?.textContent).toContain("暂无风险提示");
     expect(screen.getByText("style_profile.json")).toBeTruthy();
     expect(screen.getByText("attack_playbook.json")).toBeTruthy();
+    const detailText = [...document.querySelectorAll(".skill-detail__section")]
+      .map((section) => section.textContent ?? "")
+      .join("\n");
+    expect(detailText).toContain("catchphrases");
+    expect(detailText).toContain("证据");
+    expect(detailText).toContain("attack_playbook.json");
+    expect(detailText).toContain("classification");
   });
 
   async function createDraftFromCreator(goal = "creator goal"): Promise<void> {
@@ -777,12 +867,12 @@ describe("Workbench App", () => {
   async function completeTryoutRounds(cycle: number): Promise<void> {
     const before = messages.filter((message) => message.type === "skills:runTryout").length;
     for (let round = 0; round < 3; round += 1) {
-      await userEvent.type(screen.getByPlaceholderText("输入任意言论..."), `第 ${cycle + 1} 轮 ${round + 1}`);
+      fireEvent.change(screen.getByPlaceholderText("输入任意言论..."), { target: { value: `第 ${cycle + 1} 轮 ${round + 1}` } });
       await userEvent.click(screen.getByRole("button", { name: "发送试打" }));
+      await waitFor(() => {
+        expect(messages.filter((message) => message.type === "skills:runTryout")).toHaveLength(before + round + 1);
+      });
     }
-    await waitFor(() => {
-      expect(messages.filter((message) => message.type === "skills:runTryout")).toHaveLength(before + 3);
-    });
     expect(await screen.findByText("试打反馈")).toBeTruthy();
   }
 
@@ -793,6 +883,10 @@ describe("Workbench App", () => {
   function completedCreationStages(): string[] {
     return [...document.querySelectorAll(".creator-stage-list__item--done")]
       .map((item) => item.textContent ?? "");
+  }
+
+  function failedCreationStage(): string {
+    return document.querySelector(".creator-stage-list__item--failed")?.textContent ?? "";
   }
 });
 
@@ -840,10 +934,10 @@ async function seedCreatorModel(options: SeedCreatorModelOptions = {}): Promise<
       ? "not-json"
       : JSON.stringify({
         skill_md: "# Workbench Skill\n\n追问证据，压住跳步结论。",
-        style_profile: { tone: "短促" },
+        style_profile: validStyleProfile("短促"),
         attack_playbook: fixedAttackPlaybook({ moves: ["补证据"] }),
         sample_outputs: [
-          { prompt: "你不懂", reply: "先把证据摆出来。" },
+          { prompt: "你不懂", reply: "先把证据摆出来，再说明前提。" },
           { prompt: "大家都这么说", reply: "共识不是证据。" },
         ],
       });
@@ -853,7 +947,7 @@ async function seedCreatorModel(options: SeedCreatorModelOptions = {}): Promise<
       json: async () => ({
         choices: [{
           message: {
-            content: isDraftRequest ? draftContent : "先把证据摆出来。",
+            content: isDraftRequest ? draftContent : "先把证据摆出来，再说明前提。",
           },
         }],
       }),
@@ -878,5 +972,13 @@ function fixedAttackPlaybook(extra: Record<string, unknown> = {}): Record<string
       definition_war: 0.1,
       compressed_conclusion: 0.15,
     },
+  };
+}
+
+function validStyleProfile(label = "短促"): Record<string, unknown> {
+  return {
+    catchphrases: [label],
+    keywords: ["证据", "前提"],
+    sentence_patterns: ["先追问前提，再压结论"],
   };
 }

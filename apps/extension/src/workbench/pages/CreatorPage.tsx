@@ -1,12 +1,12 @@
-import { Send, Sparkles } from "lucide-react";
+import { Send, Sparkles, ThumbsUp, ThumbsDown, PenLine } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   CUSTOM_LENGTH_DEFAULT_TARGET,
   CUSTOM_LENGTH_MAX_CHARS,
   CUSTOM_LENGTH_MODE,
-  LENGTH_OPTIONS,
   sanitizeCustomLengthTarget,
 } from "../../api/lengthConstraints";
+import { BambooStageIndicator } from "../components/BambooStageIndicator";
 import { PageHeader } from "../components/PageHeader";
 import { useTranslation } from "../i18n";
 import { runtimeApi, type CorpusBox, type SkillDraft, type SkillInfo } from "../runtimeApi";
@@ -22,6 +22,7 @@ type Props = {
 };
 
 const FEEDBACK_TAGS = ["不够像", "不够狠", "太油", "逻辑弱", "太长", "太短", "梗太多", "梗太少"];
+const REJECTION_REASONS = ["不够像", "不够狠", "太油", "逻辑弱", "太长", "太短"];
 const CREATION_STAGE_KEYS = [
   "creator.stageValidateMaterial",
   "creator.stageReadMaterial",
@@ -38,6 +39,10 @@ type ChatMessage = {
   degradedReason?: string;
   pending?: boolean;
   failed?: boolean;
+  tryoutId?: number;
+  rating?: "accepted" | "rejected" | null;
+  rejectionReason?: string;
+  annotation?: string;
 };
 
 export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated, showToast }: Props) {
@@ -50,15 +55,22 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
   const [totalEntries, setTotalEntries] = useState(0);
   const [creating, setCreating] = useState(false);
   const [creationStageIndex, setCreationStageIndex] = useState<number | null>(null);
+  const [creationFailedStageIndex, setCreationFailedStageIndex] = useState<number | null>(null);
   const [draft, setDraft] = useState<SkillDraft | null>(null);
   const [acceptedTryoutIds, setAcceptedTryoutIds] = useState<number[]>([]);
   const [feedbackTags, setFeedbackTags] = useState<Set<string>>(new Set());
   const [feedbackText, setFeedbackText] = useState("");
   const [applyingFeedback, setApplyingFeedback] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [tryoutLengthMode, setTryoutLengthMode] = useState("短");
   const [customLengthTarget, setCustomLengthTarget] = useState(String(CUSTOM_LENGTH_DEFAULT_TARGET));
   const [creatorError, setCreatorError] = useState("");
+  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
+  const [rejectionDialogMessageId, setRejectionDialogMessageId] = useState("");
+  const [rejectionDialogTryoutId, setRejectionDialogTryoutId] = useState(0);
+  const [annotationDialogOpen, setAnnotationDialogOpen] = useState(false);
+  const [annotationDialogMessageId, setAnnotationDialogMessageId] = useState("");
+  const [annotationDialogTryoutId, setAnnotationDialogTryoutId] = useState(0);
+  const [annotationDialogValue, setAnnotationDialogValue] = useState("");
   const sendingTryoutRef = useRef(false);
 
   useEffect(() => {
@@ -99,17 +111,14 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
       const result = await runtimeApi.runSkillTryout(draft.id, {
         user_utterance: text,
         round_index: roundIndex,
-        lengthMode: tryoutLengthMode,
-        customLengthTarget: tryoutLengthMode === CUSTOM_LENGTH_MODE
-          ? sanitizeCustomLengthTarget(customLengthTarget) ?? CUSTOM_LENGTH_DEFAULT_TARGET
-          : undefined,
+        lengthMode: CUSTOM_LENGTH_MODE,
+        customLengthTarget: sanitizeCustomLengthTarget(customLengthTarget) ?? CUSTOM_LENGTH_DEFAULT_TARGET,
       });
       setChatMessages((prev) => prev.map((msg) => (
         msg.id === pendingId
-          ? { ...msg, text: result.reply, degraded: result.degraded, degradedReason: result.degraded_reason, pending: false }
+          ? { ...msg, text: result.reply, degraded: result.degraded, degradedReason: result.degraded_reason, pending: false, tryoutId: result.id }
           : msg
       )));
-      setAcceptedTryoutIds((prev) => [...prev, result.id]);
     } catch (error) {
       const message = skillCreatorErrorMessage(error, t, "creator.tryoutFailed");
       setChatMessages((prev) => prev.map((msg) => (
@@ -133,28 +142,36 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
 
   const handleCreate = async () => {
     if (selectedBoxes.size === 0 || !skillGoal.trim()) return;
+    let currentStage = 0;
     setCreating(true);
-    setCreationStageIndex(0);
+    setCreationFailedStageIndex(null);
+    setCreationStageIndex(currentStage);
     setCreatorError("");
     try {
       await Promise.resolve();
-      setCreationStageIndex(1);
+      currentStage = 1;
+      setCreationStageIndex(currentStage);
       await Promise.resolve();
-      setCreationStageIndex(2);
+      currentStage = 2;
+      setCreationStageIndex(currentStage);
       const next = await runtimeApi.createSkillDraft({
         source_box_ids: Array.from(selectedBoxes),
         skill_name: skillName.trim() || "Clapback Skill",
         skill_goal: skillGoal.trim(),
       });
-      setCreationStageIndex(3);
+      currentStage = 3;
+      setCreationStageIndex(currentStage);
       await Promise.resolve();
-      setCreationStageIndex(4);
+      currentStage = 4;
+      setCreationStageIndex(currentStage);
       setDraft(next);
       setChatMessages([]);
       setAcceptedTryoutIds([]);
       showToast(t("toast.created"));
     } catch (error) {
       const message = skillCreatorErrorMessage(error, t, "toast.createFailed");
+      setCreationStageIndex(null);
+      setCreationFailedStageIndex(currentStage);
       setCreatorError(message);
       showToast(message);
     } finally {
@@ -211,6 +228,80 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
     }
   };
 
+  const handleRateTryout = async (messageId: string, tryoutId: number, rating: "accepted" | "rejected" | null, rejectionReason?: string) => {
+    try {
+      const result = await runtimeApi.rateTryout(tryoutId, { rating, rejectionReason, annotation: undefined });
+      setChatMessages((prev) => prev.map((msg) =>
+        msg.id === messageId
+          ? { ...msg, rating: result.user_rating, rejectionReason: result.rejection_reason, annotation: result.user_annotation }
+          : msg
+      ));
+      if (rating === "accepted") {
+        setAcceptedTryoutIds((prev) => prev.includes(tryoutId) ? prev : [...prev, tryoutId]);
+      } else if (rating === "rejected") {
+        setAcceptedTryoutIds((prev) => prev.filter((id) => id !== tryoutId));
+      }
+    } catch (error) {
+      const message = skillCreatorErrorMessage(error, t, "creator.rateFailed");
+      showToast(message);
+    }
+  };
+
+  const handleAnnotateTryout = async (messageId: string, tryoutId: number, annotation: string) => {
+    try {
+      const msg = chatMessages.find((m) => m.id === messageId);
+      const result = await runtimeApi.rateTryout(tryoutId, {
+        rating: msg?.rating ?? null,
+        rejectionReason: msg?.rejectionReason,
+        annotation
+      });
+      setChatMessages((prev) => prev.map((m) =>
+        m.id === messageId
+          ? { ...m, annotation: result.user_annotation }
+          : m
+      ));
+    } catch (error) {
+      const message = skillCreatorErrorMessage(error, t, "creator.annotateFailed");
+      showToast(message);
+    }
+  };
+
+  const openRejectionDialog = (messageId: string, tryoutId: number) => {
+    setRejectionDialogMessageId(messageId);
+    setRejectionDialogTryoutId(tryoutId);
+    setRejectionDialogOpen(true);
+  };
+
+  const closeRejectionDialog = () => {
+    setRejectionDialogOpen(false);
+    setRejectionDialogMessageId("");
+    setRejectionDialogTryoutId(0);
+  };
+
+  const confirmRejection = (reason: string) => {
+    handleRateTryout(rejectionDialogMessageId, rejectionDialogTryoutId, "rejected", reason);
+    closeRejectionDialog();
+  };
+
+  const openAnnotationDialog = (messageId: string, tryoutId: number, currentAnnotation: string) => {
+    setAnnotationDialogMessageId(messageId);
+    setAnnotationDialogTryoutId(tryoutId);
+    setAnnotationDialogValue(currentAnnotation);
+    setAnnotationDialogOpen(true);
+  };
+
+  const closeAnnotationDialog = () => {
+    setAnnotationDialogOpen(false);
+    setAnnotationDialogMessageId("");
+    setAnnotationDialogTryoutId(0);
+    setAnnotationDialogValue("");
+  };
+
+  const confirmAnnotation = () => {
+    handleAnnotateTryout(annotationDialogMessageId, annotationDialogTryoutId, annotationDialogValue);
+    closeAnnotationDialog();
+  };
+
   return (
     <>
       <PageHeader title={t("creator.title")} subtitle={t("creator.subtitle")} />
@@ -226,19 +317,65 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
               <p className="creator-tryout-hint">{t("creator.tryoutHint")}</p>
             )}
             {chatMessages.map((msg, i) => (
-              <div
-                key={msg.id}
-                className={`chat-bubble chat-bubble--${msg.role} ${msg.pending ? "chat-bubble--pending" : ""} ${msg.failed ? "chat-bubble--failed" : ""}`}
-                role={msg.failed ? "alert" : undefined}
-                aria-live={msg.pending || msg.failed ? "polite" : undefined}
-              >
-                {msg.text}
-                {msg.degraded && (
-                  <span className="chat-bubble__status">
-                    {msg.degradedReason
-                      ? `${t("creator.tryoutDegraded")}：${skillCreatorErrorMessage(msg.degradedReason, t, "creator.errorModelRequestFailed")}`
-                      : t("creator.tryoutDegraded")}
-                  </span>
+              <div key={msg.id}>
+                <div
+                  className={`chat-bubble chat-bubble--${msg.role} ${msg.pending ? "chat-bubble--pending" : ""} ${msg.failed ? "chat-bubble--failed" : ""}`}
+                  role={msg.failed ? "alert" : undefined}
+                  aria-live={msg.pending || msg.failed ? "polite" : undefined}
+                >
+                  {msg.text}
+                  {msg.degraded && (
+                    <span className="chat-bubble__status">
+                      {msg.degradedReason
+                        ? `${t("creator.tryoutDegraded")}：${skillCreatorErrorMessage(msg.degradedReason, t, "creator.errorModelRequestFailed")}`
+                        : t("creator.tryoutDegraded")}
+                    </span>
+                  )}
+                </div>
+                {msg.role === "assistant" && !msg.pending && !msg.failed && msg.tryoutId && (
+                  <div className="tryout-actions">
+                    <button
+                      type="button"
+                      className={`tryout-action ${msg.rating === "accepted" ? "tryout-action--active" : ""}`}
+                      onClick={() => handleRateTryout(msg.id, msg.tryoutId!, msg.rating === "accepted" ? null : "accepted")}
+                      title={t("creator.acceptTryout")}
+                    >
+                      <ThumbsUp size={16} />
+                      <span>{t("creator.accept")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`tryout-action ${msg.rating === "rejected" ? "tryout-action--active" : ""}`}
+                      onClick={() => {
+                        if (msg.rating === "rejected") {
+                          handleRateTryout(msg.id, msg.tryoutId!, null);
+                        } else {
+                          openRejectionDialog(msg.id, msg.tryoutId!);
+                        }
+                      }}
+                      title={t("creator.rejectTryout")}
+                    >
+                      <ThumbsDown size={16} />
+                      <span>{t("creator.reject")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`tryout-action ${msg.annotation ? "tryout-action--active" : ""}`}
+                      onClick={() => {
+                        openAnnotationDialog(msg.id, msg.tryoutId!, msg.annotation ?? "");
+                      }}
+                      title={t("creator.annotateTryout")}
+                    >
+                      <PenLine size={16} />
+                      <span>{t("creator.annotate")}</span>
+                    </button>
+                    {msg.rejectionReason && (
+                      <span className="tryout-meta">{t("creator.reason")}: {msg.rejectionReason}</span>
+                    )}
+                    {msg.annotation && (
+                      <span className="tryout-meta">{t("creator.annotation")}: {msg.annotation}</span>
+                    )}
+                  </div>
                 )}
               </div>
             ))}
@@ -275,36 +412,20 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
             )}
           </div>
           <div className="chat-input-row">
-            <label className="creator-length-control">
-              <span>{t("creator.tryoutLength")}</span>
-              <select
-                className="creator-length-control__select"
-                value={tryoutLengthMode}
-                onChange={(e) => setTryoutLengthMode(e.target.value)}
-                aria-label={t("creator.tryoutLength")}
+            <label className="creator-length-control creator-length-control--target">
+              <span>{t("creator.customLengthTarget")}</span>
+              <input
+                className="creator-length-control__input"
+                type="number"
+                min="1"
+                max={CUSTOM_LENGTH_MAX_CHARS}
+                step="1"
+                value={customLengthTarget}
+                onChange={(e) => setCustomLengthTarget(normalizeCustomLengthInput(e.target.value))}
+                aria-label={t("creator.customLengthTarget")}
                 disabled={!draft || feedbackReady}
-              >
-                {LENGTH_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
+              />
             </label>
-            {tryoutLengthMode === CUSTOM_LENGTH_MODE && (
-              <label className="creator-length-control creator-length-control--target">
-                <span>{t("creator.customLengthTarget")}</span>
-                <input
-                  className="creator-length-control__input"
-                  type="number"
-                  min="1"
-                  max={CUSTOM_LENGTH_MAX_CHARS}
-                  step="1"
-                  value={customLengthTarget}
-                  onChange={(e) => setCustomLengthTarget(normalizeCustomLengthInput(e.target.value))}
-                  aria-label={t("creator.customLengthTarget")}
-                  disabled={!draft || feedbackReady}
-                />
-              </label>
-            )}
             <input
               className="chat-input"
               value={chatInput}
@@ -342,6 +463,9 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
           </label>
           <h3 className="creator-sidebar__title">{t("creator.corpusTitle")}</h3>
           <p className="creator-sidebar__hint">{t("creator.corpusHint")}</p>
+          <p className="creator-sidebar__hint" style={{ marginTop: "4px", color: "var(--ink-light)" }}>
+            {t("creator.corpusMaterialLimit")}
+          </p>
 
           <div className="box-checklist">
             {boxes.map((box) => {
@@ -365,21 +489,31 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
           </div>
 
           <div className="creator-sidebar__footer">
-            {creationStageIndex !== null && (
+            {(creationStageIndex !== null || creationFailedStageIndex !== null) && (
               <div className="creator-stage-list" aria-live="polite">
-                {CREATION_STAGE_KEYS.map((key, index) => (
-                  <div
-                    key={key}
-                    className={[
-                      "creator-stage-list__item",
-                      index === creationStageIndex ? "creator-stage-list__item--active" : "",
-                      index < creationStageIndex ? "creator-stage-list__item--done" : "",
-                    ].filter(Boolean).join(" ")}
-                  >
-                    <span className="creator-stage-list__dot" aria-hidden="true" />
-                    <span>{t(key)}</span>
-                  </div>
-                ))}
+                {CREATION_STAGE_KEYS.map((key, index) => {
+                  const progressIndex = creationFailedStageIndex ?? creationStageIndex;
+                  const isFailed = index === creationFailedStageIndex;
+
+                  let status: "pending" | "active" | "done" | "failed";
+                  if (isFailed) {
+                    status = "failed";
+                  } else if (creationFailedStageIndex === null && index === creationStageIndex) {
+                    status = "active";
+                  } else if (progressIndex !== null && index < progressIndex) {
+                    status = "done";
+                  } else {
+                    status = "pending";
+                  }
+
+                  return (
+                    <div key={key} className={`creator-stage-list__item creator-stage-list__item--${status}`}>
+                      <BambooStageIndicator status={status} stageIndex={index} />
+                      <span className="creator-stage-list__text">{t(key)}</span>
+                      {isFailed && <span className="creator-stage-list__status">{t("creator.stageFailed")}</span>}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {creatorError && <p className="creator-error" role="alert">{creatorError}</p>}
@@ -405,6 +539,52 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
           </div>
         </aside>
       </div>
+
+      {rejectionDialogOpen && (
+        <div className="modal-overlay" onClick={closeRejectionDialog}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-dialog__title">{t("creator.selectRejectionReason")}</h3>
+            <div className="modal-dialog__reasons">
+              {REJECTION_REASONS.map((reason) => (
+                <button
+                  key={reason}
+                  type="button"
+                  className="modal-dialog__reason-btn"
+                  onClick={() => confirmRejection(reason)}
+                >
+                  {reason}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn-secondary btn-sm" onClick={closeRejectionDialog}>
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {annotationDialogOpen && (
+        <div className="modal-overlay" onClick={closeAnnotationDialog}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-dialog__title">{t("creator.annotationPrompt")}</h3>
+            <textarea
+              className="input-field modal-dialog__textarea"
+              value={annotationDialogValue}
+              onChange={(e) => setAnnotationDialogValue(e.target.value)}
+              placeholder={t("creator.annotationPrompt")}
+              rows={4}
+            />
+            <div className="modal-dialog__actions">
+              <button type="button" className="btn-secondary btn-sm" onClick={closeAnnotationDialog}>
+                {t("common.cancel")}
+              </button>
+              <button type="button" className="btn-primary btn-sm" onClick={confirmAnnotation}>
+                {t("common.confirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -419,9 +599,12 @@ function skillCreatorErrorMessage(error: unknown, t: (key: string) => string, fa
   if (raw.includes("skill_creator_model_required")) return t("creator.errorModelRequired");
   if (raw.includes("skill_creator_model_name_missing")) return t("creator.errorModelNameMissing");
   if (raw.includes("skill_creator_model_base_url_invalid")) return t("creator.errorModelBaseUrlInvalid");
+  if (raw.includes("skill_creator_model_timeout")) return t("creator.errorModelTimeout");
+  if (raw.includes("skill_creator_model_output_truncated")) return t("creator.errorModelOutputTruncated");
   if (raw.includes("skill_creator_model_request_failed_401") || raw.includes("skill_creator_model_request_failed_403")) return t("creator.errorModelUnauthorized");
   if (raw.includes("skill_creator_model_request_failed_429")) return t("creator.errorModelRateLimited");
   if (raw.includes("skill_creator_model_request_failed")) return t("creator.errorModelRequestFailed");
+  if (raw.includes("skill_creator_tryout_too_short")) return t("creator.errorTryoutTooShort");
   if (raw.includes("skill_creator_material_insufficient")) return t("creator.errorMaterialInsufficient");
   if (raw.includes("skill_creator_invalid_output")) return t("creator.errorInvalidOutput");
   if (raw.includes("skill_creator_feedback_limit_reached")) return t("creator.errorFeedbackLimit");
