@@ -40,9 +40,9 @@ export function resolveLengthConstraint(settings: LengthSettings): LengthConstra
       };
     }
     const minChars = Math.max(1, target - 6);
-    const maxChars = Math.min(CUSTOM_LENGTH_MAX_CHARS, target + 10);
+    const maxChars = Math.min(CUSTOM_LENGTH_MAX_CHARS, Math.max(target + 10, Math.ceil(target * 1.25)));
     return {
-      label: `目标 ${target} 个汉字，尽量控制在 ${minChars} 到 ${maxChars} 个汉字`,
+      label: `目标 ${target} 个汉字，完整表达优先，建议不少于 ${minChars} 个汉字，最多 ${maxChars} 个汉字`,
       maxChars,
       minChars,
       targetChars: target,

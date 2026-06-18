@@ -18,6 +18,7 @@ type ModelTextRequest = {
   timeoutMs?: number;
   responseFormat?: "json_object";
   stream?: boolean;
+  thinkingMode?: "disabled" | "provider_default";
 };
 
 const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 60_000;
@@ -201,7 +202,9 @@ async function requestOpenAiChat(
     temperature: request.temperature,
     max_tokens: request.maxTokens ?? 512,
     response_format: request.responseFormat === "json_object" ? { type: "json_object" } : undefined,
-    thinking: shouldDisableDeepSeekThinking(baseUrl, modelName) ? { type: "disabled" } : undefined,
+    thinking: shouldDisableDeepSeekThinking(baseUrl, modelName) && request.thinkingMode !== "provider_default"
+      ? { type: "disabled" }
+      : undefined,
     n: 1,
     stream: request.stream ?? false,
   });

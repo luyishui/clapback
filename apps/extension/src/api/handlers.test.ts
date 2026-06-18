@@ -965,7 +965,7 @@ describe("extension background API handlers", () => {
     const tryoutBody = JSON.parse(String(tryoutCalls[1][1].body));
     const prompt = tryoutBody.messages.map((message: { content: string }) => message.content).join("\n");
     expect(prompt).toContain("目标 16 个汉字");
-    expect(prompt).toContain("10 到 26 个汉字");
+    expect(prompt).toContain("建议不少于 10 个汉字，最多 26 个汉字");
   });
 
   it("rebuilds Skill draft files through the model when feedback is applied", async () => {
@@ -1920,7 +1920,7 @@ describe("extension background API handlers", () => {
     expect(prompt).toContain("输出 3 条候选");
     expect(prompt).not.toContain("输出 4 条候选");
     expect(prompt).toContain("每条候选");
-    expect(prompt).toContain("94 到 110 个汉字");
+    expect(prompt).toContain("94 到 125 个汉字");
     expect(prompt).toContain("不是 3 条合计");
     expect(prompt).toContain("直接输出最终候选");
     expect(prompt).toContain("不要先写超长草稿");
@@ -1930,34 +1930,42 @@ describe("extension background API handlers", () => {
     expect(prompt).not.toContain("70 字左右一律失败");
   });
 
-  it("uses compact model-written attempts for OpenCode DeepSeek long custom generation", async () => {
+  it("uses the Skill activation agent pipeline for OpenCode DeepSeek long custom generation", async () => {
     await handleExtensionMessage({
       type: "models:save",
       payload: {
         provider: "OpenCode Go",
         model_name: "deepseek-v4-flash",
         base_url: "https://opencode.ai/zen/go/v1",
-        api_key: "sk-generation-opencode-compact",
+        api_key: "sk-generation-opencode-agent",
         api_protocol: "openai_chat",
         is_default: true,
       },
     });
-    const compactOutputs = [
-      "这条候选来自模型，围绕偷换概念、长期控制、金钱压榨和心理崩溃展开，说明吃饭睡觉只能处理身体疲惫，盖不住关系剥削的真实伤害，结尾压住对方轻飘飘的简化。",
-      "把复杂关系伤害说成没吃饭没睡觉，就是用身体状态替换长期操控和经济压榨。真正让人崩溃的不是少睡一晚，而是反复被索取、被否定、被掏空后还要被一句生活习惯带过。",
-      "如果吃饭睡觉能解决一切，那情感勒索和金钱压榨都可以改名叫作息紊乱。问题恰恰在于有人把系统性的关系剥削降维成身体疲惫，让真正的伤害从讨论里消失。",
-      "目标说法轻飘飘地绕开了核心：胖猫承受的是长期情感操控、金钱压榨和心理崩塌，不是简单饿了困了。拿生活状态遮住关系暴力，本身就是最典型的偷换概念。",
-      "别把心理崩溃说成作息问题，长期被控制和索取的人不是补一觉就能回血。用吃饭睡觉概括整件事，只会把加害结构洗成生活小毛病，最后替真正的伤害卸责。",
-      "这不是讨论健康习惯，而是在把复杂的操控链条压扁成身体状态。情感勒索、经济榨取、精神摧毁都被一句吃饭睡觉抹平，听起来温和，实际是在帮问题逃跑。",
-      "扩写后的候选一来自模型：把复杂问题简化成身体状态，是把长期情感操控、金钱压榨和心理崩溃全部抹成吃饭睡觉的小毛病。真正的问题在关系里持续发生，靠休息解决不了剥削，也盖不住被掏空后的绝望，这一点不能被轻轻带过。",
-      "扩写后的候选二来自模型：说没吃饭没睡觉就能解决，等于把反复索取、否定和经济压榨都塞进作息问题里。身体疲惫当然需要照顾，但这不能替代对关系控制的追问，更不能让真实伤害从讨论里消失，这一点不能被轻轻带过。",
-      "扩写后的候选三来自模型：如果吃饭睡觉能解释胖猫事件，那情感勒索和金钱压榨都成了生活习惯不好。可心理崩溃不是一顿饭造成的，而是长期被控制、被榨取后的结果，这种简化本身就在替伤害卸责，这一点不能被轻轻带过。",
-      "扩写后的候选四来自模型：目标说法把关系剥削降维成身体疲劳，看似关心，实际绕开了长期操控、金钱压榨和精神摧毁。吃饭睡觉只能缓解表层状态，解释不了一个人如何被一步步逼到崩溃，这一点不能被轻轻带过。",
-      "扩写后的候选五来自模型：别把系统性的关系伤害说成作息紊乱，长期被索取和否定的人不是补一觉就能恢复。用身体状态概括整件事，只会让施害结构变成生活小毛病，最后把真正的责任轻轻放走，这一点不能被轻轻带过。",
-      "扩写后的候选六来自模型：这不是健康建议，而是偷换概念。目标把情感操控、经济榨取和心理崩塌压缩成吃饭睡觉，听起来温和，实际把复杂伤害从公共讨论里抹掉，让问题披着关心的外衣逃走，这一点不能被轻轻带过。",
+    const activationPlan = {
+      skillIdentity: ["焚锋", "直接拆逻辑"],
+      targetReading: "目标把复杂问题简化成身体状态。",
+      attackDirection: "抓住偷换概念，拆掉作息解释一切。",
+      sharedConstraints: ["用户意图最高", "不要空骂", "完整表达优先"],
+      forbiddenPatterns: ["不要复读目标评论"],
+      angles: [
+        { id: "a1", focus: "偷换概念", howToApply: "指出对方用身体状态替换长期操控。", styleNote: "直接压住偷换" },
+        { id: "a2", focus: "责任转移", howToApply: "指出这种说法替关系伤害卸责。", styleNote: "嘲讽收尾" },
+        { id: "a3", focus: "因果链条", howToApply: "讲清控制、索取、崩溃之间的顺序。", styleNote: "短句推进" },
+      ],
+      lengthStrategy: "目标 100 个汉字，完整表达优先，最多 125 个汉字",
+    };
+    const executeOutputs = [
+      "把复杂关系伤害说成吃饭睡觉，就是把长期控制、索取、否定和经济压榨全擦掉。身体疲惫可以靠休息缓过来，但反复被掏空、被羞辱、被迫承担后果，不会因为多睡一觉就自动消失。别拿作息给真实伤害洗地，也别装轻巧。",
+      "把问题归成没吃没睡，看似关心身体，实际是在替施压者卸责。真正压垮人的不是少睡一晚，而是一次次被索取、被否定、被控制，还要被一句生活习惯轻飘飘带过。这样解释不了伤害，只能掩护责任，把焦点从施压者身上挪开。",
+      "如果吃饭睡觉能解决一切，那情感勒索和金钱压榨都能改名叫作息紊乱。荒唐就在这里：有人把系统性的关系剥削降维成身体疲惫，好让真正该承担责任的人从讨论里消失，再装成理性建议，顺手把伤害说轻，还挺会甩锅。",
     ];
-    let compactOutputIndex = 0;
-    const fetchMock = vi.fn(async () => openAiStreamText(compactOutputs[Math.min(compactOutputIndex++, compactOutputs.length - 1)]));
+    let outputIndex = 0;
+    const fetchMock = vi.fn(async () => {
+      const index = outputIndex++;
+      if (index === 0) return openAiStreamText(JSON.stringify(activationPlan));
+      return openAiStreamText(executeOutputs[index - 1]);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await handleExtensionMessage({
@@ -1972,57 +1980,51 @@ describe("extension background API handlers", () => {
     });
 
     expect(response.candidates).toHaveLength(3);
-    expect(response.candidates.every((candidate) => [...candidate].length >= 94 && [...candidate].length <= 110)).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(16);
+    expect(response.candidates).toEqual(executeOutputs);
+    expect(response.candidates.every((candidate) => [...candidate].length >= 94 && [...candidate].length <= 125)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const bodies = (fetchMock.mock.calls as unknown as Array<[string, { body: string }]>)
       .map(([, init]) => JSON.parse(String(init.body)));
     expect(bodies.every((body) => body.model === "deepseek-v4-flash")).toBe(true);
-    expect(bodies.every((body) => body.max_tokens === 1024)).toBe(true);
+    expect(bodies[0].max_tokens).toBe(2400);
+    expect(bodies.slice(1).every((body) => body.max_tokens === 1024)).toBe(true);
     expect(bodies.every((body) => body.stream === true)).toBe(true);
     expect(bodies.every((body) => body.response_format === undefined)).toBe(true);
     expect(bodies.every((body) => body.thinking?.type === "disabled")).toBe(true);
     expect(bodies.every((body) => body.chat_template_kwargs === undefined)).toBe(true);
     expect(bodies.every((body) => body.reasoning_effort === undefined)).toBe(true);
     const firstPrompt = bodies[0].messages.map((message: { content: string }) => message.content).join("\n");
-    expect(firstPrompt).toContain("Skill风格: 焚锋");
-    expect(firstPrompt).toContain("用户意图最高");
-    expect(firstPrompt).toContain("系统会裁剪过长部分");
-    expect(firstPrompt).not.toContain("硬性字数");
-    expect(firstPrompt).not.toContain("style_profile.json");
+    expect(firstPrompt).toContain("任务: 阅读完整 Skill");
+    expect(firstPrompt).toContain("Direct personal attacks stacked with Chinese fighting slang");
+    expect(firstPrompt).toContain("抓住偷换概念，反驳把复杂问题简化成身体状态");
+    expect(firstPrompt).not.toContain("弹药");
+    const executePrompt = bodies[1].messages.map((message: { content: string }) => message.content).join("\n");
+    expect(executePrompt).toContain("只输出一条中文评论正文");
+    expect(executePrompt).toContain("完整表达优先");
+    expect(executePrompt).not.toContain("Direct personal attacks stacked with Chinese fighting slang");
+    expect(executePrompt).not.toContain("style_profile.json");
     expect(firstPrompt).not.toContain("/no_think");
   });
 
-  it("uses model-written compact repair prompts when OpenCode DeepSeek primary attempts are reasoning-only", async () => {
+  it("throws when OpenCode DeepSeek activation and repair return reasoning-only length output", async () => {
     await handleExtensionMessage({
       type: "models:save",
       payload: {
         provider: "OpenCode Go",
         model_name: "deepseek-v4-flash",
         base_url: "https://opencode.ai/zen/go/v1",
-        api_key: "sk-generation-opencode-compact-repair",
+        api_key: "sk-generation-opencode-agent-plan-truncated",
         api_protocol: "openai_chat",
         is_default: true,
       },
     });
-    const repairOutputs = [
-      "补位候选一来自模型：目标把复杂伤害压成身体疲惫，等于绕开长期控制、金钱索取和心理崩塌。吃饭睡觉当然重要，但它解释不了一个人如何被持续消耗到绝望，这个因果链不能被一句生活状态盖过去，也不能替关系里的责任脱身。",
-      "补位候选二来自模型：说到底，这种说法把关系里的操控和压榨拆成没吃好没睡好，听上去像关心，实际是在替核心问题卸责。真正该追问的是谁在持续索取，谁把人逼到只能崩溃，而不是把伤害塞回作息表里轻轻抹掉。",
-      "补位候选三来自模型：如果补觉吃饭就能解释一切，那情感勒索和经济榨取都成了作息管理。可胖猫承受的是长期被控制后的精神坍塌，不是普通疲劳，拿身体状态概括就是偷换概念，也是在遮住真正的压迫来源。",
-    ];
-    let callIndex = 0;
-    const fetchMock = vi.fn(async () => {
-      const index = callIndex++;
-      if (index < 16) {
-        return openAiStreamText("", {
-          finishReason: "length",
-          reasoningContent: "模型一直在推理，没有给最终可见候选。",
-        });
-      }
-      return openAiStreamText(repairOutputs[(index - 16) % repairOutputs.length]);
-    });
+    const fetchMock = vi.fn(async () => openAiStreamText("", {
+      finishReason: "length",
+      reasoningContent: "模型一直在推理，没有给最终可见候选。",
+    }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const response = await handleExtensionMessage({
+    await expect(handleExtensionMessage({
       type: "generation:generateCandidates",
       payload: {
         platform: "zhihu",
@@ -2031,18 +2033,14 @@ describe("extension background API handlers", () => {
         intent: "反驳",
         settings: { activeSkillId: "wenyan_attack", lengthMode: "自定义", customLengthTarget: 100, ammoBoxIds: [] },
       },
-    });
+    })).rejects.toThrow("generation_failed:plan_invalid");
 
-    expect(response.candidates).toHaveLength(3);
-    expect(response.candidates.every((candidate) => repairOutputs.some((output) => output.includes(candidate)))).toBe(true);
-    expect(fetchMock.mock.calls.length).toBeGreaterThan(16);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     const bodies = (fetchMock.mock.calls as unknown as Array<[string, { body: string }]>)
       .map(([, init]) => JSON.parse(String(init.body)));
-    const repairPrompts = bodies.slice(16).map((body) =>
-      body.messages.map((message: { content: string }) => message.content).join("\n")
-    );
-    expect(repairPrompts.some((prompt) => prompt.includes("补足缺失候选"))).toBe(true);
-    expect(repairPrompts.some((prompt) => prompt.includes("至少 94") && prompt.includes("不超过 110"))).toBe(true);
+    const prompts = bodies.map((body) => body.messages.map((message: { content: string }) => message.content).join("\n"));
+    expect(prompts[0]).toContain("任务: 阅读完整 Skill");
+    expect(prompts[1]).toContain("修复上一轮 Skill Activation Plan");
     expect(bodies.every((body) => body.response_format === undefined)).toBe(true);
     expect(bodies.every((body) => body.thinking?.type === "disabled")).toBe(true);
     expect(bodies.every((body) => body.chat_template_kwargs === undefined)).toBe(true);
@@ -2084,14 +2082,14 @@ describe("extension background API handlers", () => {
     });
 
     expect(response.candidates).toEqual(repaired);
-    expect(response.candidates.every((candidate) => [...candidate].length >= 44 && [...candidate].length <= 60)).toBe(true);
+    expect(response.candidates.every((candidate) => [...candidate].length >= 44 && [...candidate].length <= 63)).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const repairBody = JSON.parse(String((fetchMock.mock.calls[1][1] as { body: string }).body));
     const repairPrompt = repairBody.messages.map((message: { content: string }) => message.content).join("\n");
     expect(repairPrompt).toContain("目标 50 个汉字");
-    expect(repairPrompt).toContain("44 到 60 个汉字");
+    expect(repairPrompt).toContain("44 到 63 个汉字");
     expect(repairPrompt).toContain("候选长度");
-    expect(repairPrompt).toContain("要求范围=44-60");
+    expect(repairPrompt).toContain("要求范围=44-63");
     expect(repairPrompt).toContain("上次不合格候选");
     expect(repairPrompt).toContain("证据呢");
   });
@@ -2133,11 +2131,11 @@ describe("extension background API handlers", () => {
       },
     });
 
-    expect(response.candidates.map((candidate) => [...candidate].length)).toEqual([110, 110, 110]);
+    expect(response.candidates.map((candidate) => [...candidate].length)).toEqual([118, 116, 115]);
     const repairBody = JSON.parse(String((fetchMock.mock.calls[1][1] as { body: string }).body));
     const repairPrompt = repairBody.messages.map((message: { content: string }) => message.content).join("\n");
     expect(repairPrompt).toContain("上次候选只有 80-83 字");
-    expect(repairPrompt).toContain("补到 94-110 个汉字");
+    expect(repairPrompt).toContain("补到 94-125 个汉字");
     expect(repairPrompt).toContain("补一个具体点或因果解释");
     expect(repairPrompt).not.toContain("每条至少再补 80 个汉字");
     expect(repairPrompt).not.toContain("按 160-180 字写");
@@ -2262,14 +2260,14 @@ describe("extension background API handlers", () => {
     ]);
   });
 
-  it("trims slightly overlong custom-length model candidates without fabricating replacements", async () => {
+  it("accepts slightly over-target complete custom-length model candidates without truncation", async () => {
     await handleExtensionMessage({
       type: "models:save",
       payload: {
         provider: "OpenAI",
         model_name: "gpt-test",
         base_url: "https://api.openai.com/v1",
-        api_key: "sk-generation-trim-custom-overlong",
+        api_key: "sk-generation-custom-overlong",
         is_default: true,
       },
     });
@@ -2291,9 +2289,9 @@ describe("extension background API handlers", () => {
       },
     });
 
-    expect(response.candidates.map((candidate) => [...candidate].length)).toEqual([110, 110, 108]);
-    expect(response.candidates[0]).toBe("甲".repeat(110));
-    expect(response.candidates[1]).toBe("乙".repeat(110));
+    expect(response.candidates.map((candidate) => [...candidate].length)).toEqual([113, 115, 108]);
+    expect(response.candidates[0]).toBe("甲".repeat(113));
+    expect(response.candidates[1]).toBe("乙".repeat(115));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

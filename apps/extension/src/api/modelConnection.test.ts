@@ -115,6 +115,31 @@ describe("model connection OpenAI text extraction", () => {
     expect(requestBody.thinking_budget).toBeUndefined();
   });
 
+  it("can omit DeepSeek thinking disable for planning stages", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: "{\"ok\":true}" }, finish_reason: "stop" }] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestModelCompletion({
+      ...model,
+      model_name: "deepseek-v4-flash",
+      base_url: "https://opencode.ai/zen/go/v1",
+    }, "sk-test", {
+      system: "plan",
+      user: "read skill and plan",
+      maxTokens: 2048,
+      temperature: 0.2,
+      thinkingMode: "provider_default",
+    });
+
+    const requestCalls = fetchMock.mock.calls as unknown as Array<[string, { body: string }]>;
+    const requestBody = JSON.parse(String(requestCalls[0][1].body));
+    expect(requestBody.thinking).toBeUndefined();
+  });
+
   it("does not send unverified thinking fields for ordinary OpenAI-compatible providers", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,

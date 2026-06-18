@@ -2,11 +2,12 @@ import type { GenerateRequest, GenerateResponse } from "../content/types";
 import type { AmmoEntry, ModelConfig, SkillDetail } from "../workbench/runtimeApi";
 import { getDefaultModelConfig, getRawApiKey, getSettings, getSkillDetail, listAmmoEntries } from "./idbStore";
 import type { LengthConstraint } from "./lengthConstraints";
-import { isWithinLengthConstraint, resolveLengthConstraint, trimToMaxChars } from "./lengthConstraints";
+import { isWithinLengthConstraint, resolveLengthConstraint } from "./lengthConstraints";
 import type { ModelCompletion } from "./modelConnection";
 import { requestModelCompletion } from "./modelConnection";
 import { INTERNAL_STRATEGY_LABEL_OUTPUT_RULE } from "./internalStrategyLabels";
 import { formatSelectedSampleForPrompt, samplesFromSkillDetail, selectSampleForLength } from "./skillSamples";
+import { generateCandidatesWithCommentAgentPipeline } from "./commentAgentPipeline";
 
 const MODEL_CANDIDATE_COUNT = 4;
 const RETURN_CANDIDATE_COUNT = 3;
@@ -93,6 +94,18 @@ export async function generateCandidates(request: GenerateRequest): Promise<Gene
   const candidateCount = modelCandidateCount(lengthConstraint);
   const maxTokens = generationMaxTokens(lengthConstraint);
   const resolvedModel = { ...model, model_name: model.model_name || (await getSettings()).model };
+  if (shouldUseCommentAgentPipeline(resolvedModel, lengthConstraint)) {
+    return {
+      candidates: await generateCandidatesWithCommentAgentPipeline({
+        request,
+        promptContext,
+        lengthConstraint,
+        model: resolvedModel,
+        apiKey,
+        executeThinkingPolicy: "disabled",
+      }),
+    };
+  }
   if (shouldUseOpenCodeDeepSeekCompactStrategy(resolvedModel, lengthConstraint)) {
     return {
       candidates: await generateOpenCodeDeepSeekCompactCandidates(request, promptContext, lengthConstraint, resolvedModel, apiKey),
@@ -237,7 +250,7 @@ async function runOpenCodeDeepSeekCompactBatch(
   }));
 }
 
-function shouldUseOpenCodeDeepSeekCompactStrategy(
+function shouldUseCommentAgentPipeline(
   model: { model_name: string; base_url: string },
   lengthConstraint: LengthConstraint,
 ): boolean {
@@ -245,6 +258,13 @@ function shouldUseOpenCodeDeepSeekCompactStrategy(
     && lengthConstraint.targetChars >= 80
     && model.base_url.toLowerCase().includes("opencode.ai/zen/go")
     && /deepseek/i.test(model.model_name);
+}
+
+function shouldUseOpenCodeDeepSeekCompactStrategy(
+  _model: { model_name: string; base_url: string },
+  _lengthConstraint: LengthConstraint,
+): boolean {
+  return false;
 }
 
 function shouldStopWithoutRepair(failure: CandidateAttemptFailure): boolean {
@@ -527,7 +547,7 @@ function normalizeCandidates(candidates: string[], targetText: string, lengthCon
   const seen = new Set<string>();
   const result: string[] = [];
   for (const candidate of candidates) {
-    const text = fitModelCandidateToLength(candidate.trim(), lengthConstraint);
+    const text = candidate.trim();
     const normalized = normalizeForCompare(text);
     const length = [...text].length;
     if (!text || normalized === target || seen.has(normalized)) continue;
@@ -539,17 +559,11 @@ function normalizeCandidates(candidates: string[], targetText: string, lengthCon
   return result;
 }
 
-function fitModelCandidateToLength(candidate: string, lengthConstraint: LengthConstraint): string {
-  if (lengthConstraint.minChars === undefined) return candidate;
-  return countChars(candidate) > lengthConstraint.maxChars
-    ? trimToMaxChars(candidate, lengthConstraint.maxChars)
-    : candidate;
-}
-
 async function buildPromptContext(request: GenerateRequest): Promise<PromptContext> {
+  const ammoBoxIds = request.settings.ammoBoxIds ?? [];
   const [skill, ammo, settings] = await Promise.all([
     loadSkill(request.settings.activeSkillId),
-    loadAmmo(request.settings.ammoBoxIds ?? []),
+    ammoBoxIds.length > 0 ? loadAmmo(ammoBoxIds) : Promise.resolve([]),
     getSettings(),
   ]);
   const samples = samplesFromSkillDetail(skill);
@@ -691,8 +705,8 @@ function buildOpenCodeDeepSeekCompactRepairPrompts(
       `用户意图: ${request.intent || "反驳"}`,
       style,
       request.settings.activeSkillId === "wenyan_attack"
-        ? `任务: 保留短候选观点和文言风格，扩成接近 ${target} 字；加一句白话解释说明目标说法为什么盖不过真实伤害；不要精确数数，宁可略完整，系统会裁剪过长部分。`
-        : `任务: 保留短候选观点和 Skill 语气，扩成接近 ${target} 字；增加一个具体因果解释；不要精确数数，宁可略完整，系统会裁剪过长部分。`,
+        ? `任务: 保留短候选观点和文言风格，扩成接近 ${target} 字；加一句白话解释说明目标说法为什么盖不过真实伤害；不要精确数数，宁可略完整；明显超过硬上限会被要求压缩，不会直接截断半句。`
+        : `任务: 保留短候选观点和 Skill 语气，扩成接近 ${target} 字；增加一个具体因果解释；不要精确数数，宁可略完整；明显超过硬上限会被要求压缩，不会直接截断半句。`,
       lengthRange,
       `修复序号: ${index + 1}`,
     ].join("\n"),
@@ -710,8 +724,8 @@ function buildOpenCodeDeepSeekCompactRepairPrompts(
       style,
       `角度: ${angle}`,
       request.settings.activeSkillId === "wenyan_attack"
-        ? `写法: 半文半白，接近 ${target} 字；指出情感操控、金钱压榨或心理崩溃不能被作息问题盖过；系统会裁剪过长部分。`
-        : `写法: 接近 ${target} 字；用一个具体因果解释拆掉目标偷换；系统会裁剪过长部分。`,
+        ? `写法: 半文半白，接近 ${target} 字；指出情感操控、金钱压榨或心理崩溃不能被作息问题盖过；明显超过硬上限会被要求压缩，不会直接截断半句。`
+        : `写法: 接近 ${target} 字；用一个具体因果解释拆掉目标偷换；明显超过硬上限会被要求压缩，不会直接截断半句。`,
       lengthRange,
       `补位序号: ${index + 1}`,
     ].filter(Boolean).join("\n"),
@@ -779,19 +793,19 @@ function compactWriteInstruction(request: GenerateRequest, lengthConstraint: Len
   const target = lengthConstraint.targetChars ?? lengthConstraint.maxChars;
   if (request.settings.activeSkillId === "wenyan_attack") {
     return [
-      `写法: 接近 ${target} 字；不要精确数数，宁可略完整，系统会裁剪过长部分。`,
+      `写法: 接近 ${target} 字；不要精确数数，宁可略完整；明显超过硬上限会被要求压缩，不会直接截断半句。`,
       "结构: 判词开头，指出情感操控/金钱压榨/心理崩溃，再加一句白话解释说明目标说法为什么盖不过关系中的真实伤害。",
     ].join("\n");
   }
   return [
-    `写法: 三到四个分句，接近 ${target} 字；不要精确数数，宁可略完整，系统会裁剪过长部分。`,
+    `写法: 三到四个分句，接近 ${target} 字；不要精确数数，宁可略完整；明显超过硬上限会被要求压缩，不会直接截断半句。`,
     "内容: 至少包含一个具体因果解释，不要短梗，不要复读目标评论。",
   ].join("\n");
 }
 
 function compactLengthRangeInstruction(lengthConstraint: LengthConstraint): string {
   if (lengthConstraint.minChars !== undefined) {
-    return `硬性长度: 至少 ${lengthConstraint.minChars} 个汉字，不超过 ${lengthConstraint.maxChars} 个汉字；少于下限会被丢弃，略超过上限会由系统裁剪。`;
+    return `硬性长度: 至少 ${lengthConstraint.minChars} 个汉字，不超过 ${lengthConstraint.maxChars} 个汉字；少于下限会被丢弃，明显超过硬上限会被要求压缩，不会直接截断半句。`;
   }
   return `硬性长度: 不超过 ${lengthConstraint.maxChars} 个汉字；超过上限会被丢弃。`;
 }
@@ -801,7 +815,7 @@ function strictLengthInstruction(lengthConstraint: LengthConstraint, candidateCo
     ? `长目标写法: 直接输出最终候选，不要先写超长草稿；每条围绕目标文本的一到两个具体点展开，用 3 到 5 个分句说清漏洞、影响和收束结论；不要解释推理过程。`
     : "";
   if (lengthConstraint.minChars !== undefined) {
-    return `硬性字数: 每条候选最终必须落在 ${lengthConstraint.minChars} 到 ${lengthConstraint.maxChars} 个汉字；这是每条候选单独计数，不是 ${candidateCount} 条合计；少于 ${lengthConstraint.minChars} 会被丢弃，略超过 ${lengthConstraint.maxChars} 会由系统裁剪。短句不是短回复；如果 Skill 要求短句，只能把一条候选拆成多句，不能少于下限。${longTargetRule}`;
+    return `硬性字数: 每条候选最终必须落在 ${lengthConstraint.minChars} 到 ${lengthConstraint.maxChars} 个汉字；这是每条候选单独计数，不是 ${candidateCount} 条合计；少于 ${lengthConstraint.minChars} 会被丢弃，明显超过硬上限会被要求压缩，不会直接截断半句。短句不是短回复；如果 Skill 要求短句，只能把一条候选拆成多句，不能少于下限。${longTargetRule}`;
   }
   return `硬性字数: 每条候选必须${lengthConstraint.label}；这是每条候选单独计数，不是 ${candidateCount} 条合计；超过上限会被丢弃。短句不是短回复；如果 Skill 要求短句，只能把一条候选拆成多句。${longTargetRule}`;
 }
