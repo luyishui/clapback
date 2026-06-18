@@ -26,7 +26,8 @@
     "https://api.openai.com/*",
     "https://api.anthropic.com/*",
     "https://api.deepseek.com/*",
-    "https://api.moonshot.cn/*"
+    "https://api.moonshot.cn/*",
+    "https://opencode.ai/*"
   ],
   "optional_host_permissions": ["https://*/*"],
   "content_scripts": [

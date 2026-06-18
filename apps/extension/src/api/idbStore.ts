@@ -21,7 +21,7 @@ import type {
 } from "./types";
 import { DEFAULT_AMMO_BOXES } from "./defaultAmmo";
 import type { LengthSettings } from "./lengthConstraints";
-import { resolveLengthConstraint, trimToMaxChars } from "./lengthConstraints";
+import { fitToLengthConstraint, isWithinLengthConstraint, resolveLengthConstraint, trimToMaxChars } from "./lengthConstraints";
 import { findExecutableSkillFiles } from "./skillPackages";
 import { generateSkillDraftFiles, runModelSkillTryout, skillGenerationToFiles } from "./skillGeneration";
 
@@ -116,6 +116,7 @@ const DEFAULT_SETTINGS: RuntimeSettings = {
   theme: "light",
   language: "zh",
   skill_tryout_rounds: 3,
+  skill_sample_selections: {},
 };
 
 function nowIso() {
@@ -982,24 +983,17 @@ async function createTryoutReply(
 ): Promise<{ reply: string; degraded?: boolean; degraded_reason?: string }> {
   const [model, apiKey] = await Promise.all([getDefaultModelConfig(), getRawApiKey()]);
   const lengthConstraint = resolveLengthConstraint(lengthSettings);
-  let degradedReason: string | undefined;
-  if (model && apiKey) {
-    try {
-      const reply = trimToMaxChars(
-        await runModelSkillTryout({ model, apiKey, draft, userUtterance, roundIndex, lengthConstraint }),
-        lengthConstraint.maxChars,
-      );
-      if (reply) return { reply };
-    } catch (error) {
-      degradedReason = skillCreatorModelErrorCode(error);
-      // Fall through to deterministic fallback.
-    }
+  if (!model || !apiKey) throw new Error("skill_creator_model_required");
+  try {
+    const reply = trimToMaxChars(
+      await runModelSkillTryout({ model, apiKey, draft, userUtterance, roundIndex, lengthConstraint }),
+      lengthConstraint.maxChars,
+    );
+    if (isWithinLengthConstraint(reply, lengthConstraint)) return { reply };
+    throw new Error(reply ? "skill_creator_tryout_too_short" : "skill_creator_model_empty_content");
+  } catch (error) {
+    throw new Error(skillCreatorModelErrorCode(error));
   }
-  return {
-    reply: trimToMaxChars(deterministicReply(userUtterance, draft.goal), lengthConstraint.maxChars),
-    degraded: true,
-    degraded_reason: degradedReason,
-  };
 }
 
 function skillCreatorModelErrorCode(error: unknown): string {

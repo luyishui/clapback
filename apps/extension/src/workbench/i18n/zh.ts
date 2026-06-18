@@ -187,7 +187,7 @@ export const zh: Record<string, string> = {
   "creator.errorModelUnauthorized": "模型请求被拒绝，请检查 API Key 或权限",
   "creator.errorModelRateLimited": "模型请求过于频繁，请稍后重试",
   "creator.errorModelRequestFailed": "模型请求失败，请检查网络或模型配置",
-  "creator.errorTryoutTooShort": "模型回复低于目标字数，已改用可用回复",
+  "creator.errorTryoutTooShort": "模型回复低于目标字数，请调整目标或重试",
   "creator.errorMaterialInsufficient": "素材不足，请先补充更多有效样本",
   "creator.errorInvalidOutput": "模型返回的 Skill 无效，请重试",
   "creator.errorFeedbackLimit": "反馈重建最多 3 次",

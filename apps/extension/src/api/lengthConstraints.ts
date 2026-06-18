@@ -24,6 +24,11 @@ const PRESET_LENGTH_CONSTRAINTS: Record<string, LengthConstraint> = {
   展开: { label: "可展开，但不超过 90 个汉字", maxChars: 90 },
 };
 
+export const LENGTH_OPTIONS: string[] = [
+  ...Object.keys(PRESET_LENGTH_CONSTRAINTS),
+  CUSTOM_LENGTH_MODE,
+];
+
 export function resolveLengthConstraint(settings: LengthSettings): LengthConstraint {
   if (settings.lengthMode === CUSTOM_LENGTH_MODE) {
     const target = sanitizeCustomLengthTarget(settings.customLengthTarget) ?? CUSTOM_LENGTH_DEFAULT_TARGET;

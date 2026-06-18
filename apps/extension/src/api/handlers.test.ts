@@ -55,6 +55,36 @@ describe("extension background API handlers", () => {
     };
   }
 
+  function candidateJson(candidates: string[]): string {
+    return JSON.stringify({ candidates });
+  }
+
+  function openAiStreamText(content: string, options: { finishReason?: string; reasoningContent?: string } = {}) {
+    const chunks: unknown[] = [];
+    if (options.reasoningContent) {
+      chunks.push({ choices: [{ delta: { reasoning_content: options.reasoningContent } }] });
+    }
+    chunks.push({ choices: [{ delta: { content }, finish_reason: options.finishReason ?? "stop" }] });
+    return {
+      ok: true,
+      status: 200,
+      body: sseStream(chunks),
+    };
+  }
+
+  function sseStream(events: unknown[]): ReadableStream<Uint8Array> {
+    const encoder = new TextEncoder();
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const event of events) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        }
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+  }
+
   it("creates corpus boxes and dedupes added entries", async () => {
     const box = await handleExtensionMessage({
       type: "corpus:createBox",
@@ -164,7 +194,7 @@ describe("extension background API handlers", () => {
     expect(JSON.stringify(settings)).not.toContain("sk-1234567890");
 
     await handleExtensionMessage({ type: "models:delete", payload: { id: saved.id } });
-    const fallback = await handleExtensionMessage({
+    await expect(handleExtensionMessage({
       type: "generation:generate",
       payload: {
         platform: "zhihu",
@@ -173,8 +203,7 @@ describe("extension background API handlers", () => {
         intent: "反驳",
         settings: { activeSkillId: "full_fire", lengthMode: "短", ammoBoxIds: [] },
       },
-    });
-    expect(fallback.candidates).toHaveLength(3);
+    })).rejects.toThrow("generation_model_required");
   });
 
   it("saves HTTPS OpenAI-compatible model base URLs outside the built-in provider list", async () => {
@@ -305,7 +334,7 @@ describe("extension background API handlers", () => {
     expect(JSON.stringify(result)).not.toContain("sk-chat-secret");
     expect(JSON.parse(requestInit.body)).toEqual(expect.objectContaining({
       model: "gpt-test",
-      max_tokens: 1,
+      max_tokens: 1024,
     }));
   });
 
@@ -340,8 +369,53 @@ describe("extension background API handlers", () => {
     expect(requestInit.headers["anthropic-version"]).toBe("2023-06-01");
     expect(JSON.parse(requestInit.body)).toEqual(expect.objectContaining({
       model: "qwen3.7-plus",
-      max_tokens: 1,
+      max_tokens: 1024,
     }));
+  });
+
+  it("falls back to OpenCode messages when the OpenAI-compatible chat probe is unavailable", async () => {
+    const saved = await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenCode Go",
+        model_name: "deepseek-v4-flash",
+        base_url: "https://opencode.ai/zen/go/v1",
+        api_key: "sk-opencode-secret",
+        api_protocol: "openai_chat",
+      },
+    });
+    const fetchMock = vi.fn(async (url: string): Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> => {
+      if (url.endsWith("/chat/completions")) {
+        return {
+          ok: false,
+          status: 404,
+          json: async () => ({ error: { message: "not found" } }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ content: [{ type: "text", text: "pong" }] }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await handleExtensionMessage({
+      type: "models:test",
+      payload: { id: saved.id },
+    });
+
+    expect(result).toEqual({ ok: true, model: "deepseek-v4-flash" });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://opencode.ai/zen/go/v1/chat/completions",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://opencode.ai/zen/go/v1/messages",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it("creates model-generated Skill drafts from selected corpus entries", async () => {
@@ -768,7 +842,7 @@ describe("extension background API handlers", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("returns the model failure reason when Skill tryouts fall back", async () => {
+  it("throws the redacted model failure reason when Skill tryouts fail", async () => {
     await handleExtensionMessage({
       type: "models:save",
       payload: {
@@ -813,16 +887,18 @@ describe("extension background API handlers", () => {
       json: async () => ({ error: { message: "Invalid API key sk-secret-value" } }),
     });
 
-    const result = await handleExtensionMessage({
-      type: "skills:runTryout",
-      payload: { draftId: draft.id, user_utterance: "你就是不懂", round_index: 1 },
-    });
+    let message = "";
+    try {
+      await handleExtensionMessage({
+        type: "skills:runTryout",
+        payload: { draftId: draft.id, user_utterance: "你就是不懂", round_index: 1 },
+      });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
 
-    expect(result.degraded).toBe(true);
-    expect(result).toEqual(expect.objectContaining({
-      degraded_reason: expect.stringContaining("skill_creator_model_request_failed_401"),
-    }));
-    expect(JSON.stringify(result)).not.toContain("sk-secret-value");
+    expect(message).toContain("skill_creator_model_request_failed_401");
+    expect(message).not.toContain("sk-secret-value");
   });
 
   it("passes custom length constraints into model-backed Skill tryouts", async () => {
@@ -871,7 +947,7 @@ describe("extension background API handlers", () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => ({ choices: [{ message: { content: "先把证据摆出来。" } }] }),
+      json: async () => ({ choices: [{ message: { content: "先把证据摆出来，再谈结论。" } }] }),
     });
 
     await handleExtensionMessage({
@@ -1733,8 +1809,8 @@ describe("extension background API handlers", () => {
     expect(normalized.manifest?.builtin).toBe(true);
   });
 
-  it("generates deterministic fallback candidates without exposing API key to content callers", async () => {
-    const response = await handleExtensionMessage({
+  it("rejects generation without a configured model instead of returning deterministic fallback candidates", async () => {
+    await expect(handleExtensionMessage({
       type: "generation:generateCandidates",
       payload: {
         platform: "zhihu",
@@ -1743,14 +1819,11 @@ describe("extension background API handlers", () => {
         intent: "反驳",
         settings: { activeSkillId: "full_fire", lengthMode: "短", ammoBoxIds: [] },
       },
-    });
-
-    expect(response.candidates).toHaveLength(3);
-    expect(response.candidates.join("\n")).toContain("你这就是杠");
+    })).rejects.toThrow("generation_model_required");
   });
 
-  it("keeps deterministic fallback candidates within custom target length bounds", async () => {
-    const response = await handleExtensionMessage({
+  it("rejects short custom generation without a configured model instead of returning deterministic fallback candidates", async () => {
+    await expect(handleExtensionMessage({
       type: "generation:generateCandidates",
       payload: {
         platform: "zhihu",
@@ -1759,10 +1832,20 @@ describe("extension background API handlers", () => {
         intent: "短促反击",
         settings: { activeSkillId: "full_fire", lengthMode: "自定义", customLengthTarget: 12, ammoBoxIds: [] },
       },
-    });
+    })).rejects.toThrow("generation_model_required");
+  });
 
-    expect(response.candidates).toHaveLength(3);
-    expect(response.candidates.every((candidate) => [...candidate].length <= 22)).toBe(true);
+  it("rejects long custom generation without a configured model instead of padding deterministic fallback candidates", async () => {
+    await expect(handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "这个特别长的目标评论不能被原样塞进回复里，但仍然需要围绕论证漏洞和证据缺口回应" },
+        context: { pageTitle: "讨论", nearbyComments: [] },
+        intent: "指出前提和证据缺口",
+        settings: { activeSkillId: "full_fire", lengthMode: "自定义", customLengthTarget: 100, ammoBoxIds: [] },
+      },
+    })).rejects.toThrow("generation_model_required");
   });
 
   it("sends custom target length constraints to daily generation model prompts", async () => {
@@ -1776,10 +1859,11 @@ describe("extension background API handlers", () => {
         is_default: true,
       },
     });
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: "证据呢\n先补前提\n别跳结论" } }] }),
-    }));
+    const fetchMock = vi.fn(async () => openAiStreamText(candidateJson([
+      "证据不够充分，先补上再说",
+      "先把前提摆出来，再谈结论",
+      "别急着下定论，证据链还没完",
+    ])));
     vi.stubGlobal("fetch", fetchMock);
 
     await handleExtensionMessage({
@@ -1800,7 +1884,172 @@ describe("extension background API handlers", () => {
     expect(prompt).toContain("10 到 26 个汉字");
   });
 
-  it.skip("repairs model candidates that are far shorter than a custom target length", async () => {
+  it("states custom target length as a hard per-candidate rule for long daily generation", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-custom-length-hard-rule",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn(async () => openAiStreamText(candidateJson([
+      "甲".repeat(100),
+      "乙".repeat(100),
+      "丙".repeat(100),
+    ])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测长目标字数" },
+        context: { pageTitle: "讨论", nearbyComments: [] },
+        intent: "围绕目标文本反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "自定义", customLengthTarget: 100, ammoBoxIds: [] },
+      },
+    });
+
+    const requestCalls = fetchMock.mock.calls as unknown as Array<[string, { body: string }]>;
+    const requestBody = JSON.parse(String(requestCalls[0][1].body));
+    const prompt = requestBody.messages.map((message: { content: string }) => message.content).join("\n");
+    expect(prompt).toContain("硬性字数");
+    expect(prompt).toContain("输出 3 条候选");
+    expect(prompt).not.toContain("输出 4 条候选");
+    expect(prompt).toContain("每条候选");
+    expect(prompt).toContain("94 到 110 个汉字");
+    expect(prompt).toContain("不是 3 条合计");
+    expect(prompt).toContain("直接输出最终候选");
+    expect(prompt).toContain("不要先写超长草稿");
+    expect(prompt).toContain("不要解释推理过程");
+    expect(prompt).not.toContain("内部起草目标");
+    expect(prompt).not.toContain("160-180");
+    expect(prompt).not.toContain("70 字左右一律失败");
+  });
+
+  it("uses compact model-written attempts for OpenCode DeepSeek long custom generation", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenCode Go",
+        model_name: "deepseek-v4-flash",
+        base_url: "https://opencode.ai/zen/go/v1",
+        api_key: "sk-generation-opencode-compact",
+        api_protocol: "openai_chat",
+        is_default: true,
+      },
+    });
+    const compactOutputs = [
+      "这条候选来自模型，围绕偷换概念、长期控制、金钱压榨和心理崩溃展开，说明吃饭睡觉只能处理身体疲惫，盖不住关系剥削的真实伤害，结尾压住对方轻飘飘的简化。",
+      "把复杂关系伤害说成没吃饭没睡觉，就是用身体状态替换长期操控和经济压榨。真正让人崩溃的不是少睡一晚，而是反复被索取、被否定、被掏空后还要被一句生活习惯带过。",
+      "如果吃饭睡觉能解决一切，那情感勒索和金钱压榨都可以改名叫作息紊乱。问题恰恰在于有人把系统性的关系剥削降维成身体疲惫，让真正的伤害从讨论里消失。",
+      "目标说法轻飘飘地绕开了核心：胖猫承受的是长期情感操控、金钱压榨和心理崩塌，不是简单饿了困了。拿生活状态遮住关系暴力，本身就是最典型的偷换概念。",
+      "别把心理崩溃说成作息问题，长期被控制和索取的人不是补一觉就能回血。用吃饭睡觉概括整件事，只会把加害结构洗成生活小毛病，最后替真正的伤害卸责。",
+      "这不是讨论健康习惯，而是在把复杂的操控链条压扁成身体状态。情感勒索、经济榨取、精神摧毁都被一句吃饭睡觉抹平，听起来温和，实际是在帮问题逃跑。",
+      "扩写后的候选一来自模型：把复杂问题简化成身体状态，是把长期情感操控、金钱压榨和心理崩溃全部抹成吃饭睡觉的小毛病。真正的问题在关系里持续发生，靠休息解决不了剥削，也盖不住被掏空后的绝望，这一点不能被轻轻带过。",
+      "扩写后的候选二来自模型：说没吃饭没睡觉就能解决，等于把反复索取、否定和经济压榨都塞进作息问题里。身体疲惫当然需要照顾，但这不能替代对关系控制的追问，更不能让真实伤害从讨论里消失，这一点不能被轻轻带过。",
+      "扩写后的候选三来自模型：如果吃饭睡觉能解释胖猫事件，那情感勒索和金钱压榨都成了生活习惯不好。可心理崩溃不是一顿饭造成的，而是长期被控制、被榨取后的结果，这种简化本身就在替伤害卸责，这一点不能被轻轻带过。",
+      "扩写后的候选四来自模型：目标说法把关系剥削降维成身体疲劳，看似关心，实际绕开了长期操控、金钱压榨和精神摧毁。吃饭睡觉只能缓解表层状态，解释不了一个人如何被一步步逼到崩溃，这一点不能被轻轻带过。",
+      "扩写后的候选五来自模型：别把系统性的关系伤害说成作息紊乱，长期被索取和否定的人不是补一觉就能恢复。用身体状态概括整件事，只会让施害结构变成生活小毛病，最后把真正的责任轻轻放走，这一点不能被轻轻带过。",
+      "扩写后的候选六来自模型：这不是健康建议，而是偷换概念。目标把情感操控、经济榨取和心理崩塌压缩成吃饭睡觉，听起来温和，实际把复杂伤害从公共讨论里抹掉，让问题披着关心的外衣逃走，这一点不能被轻轻带过。",
+    ];
+    let compactOutputIndex = 0;
+    const fetchMock = vi.fn(async () => openAiStreamText(compactOutputs[Math.min(compactOutputIndex++, compactOutputs.length - 1)]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测 OpenCode 长目标" },
+        context: { pageTitle: "讨论", nearbyComments: [] },
+        intent: "抓住偷换概念，反驳把复杂问题简化成身体状态",
+        settings: { activeSkillId: "full_fire", lengthMode: "自定义", customLengthTarget: 100, ammoBoxIds: [] },
+      },
+    });
+
+    expect(response.candidates).toHaveLength(3);
+    expect(response.candidates.every((candidate) => [...candidate].length >= 94 && [...candidate].length <= 110)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(16);
+    const bodies = (fetchMock.mock.calls as unknown as Array<[string, { body: string }]>)
+      .map(([, init]) => JSON.parse(String(init.body)));
+    expect(bodies.every((body) => body.model === "deepseek-v4-flash")).toBe(true);
+    expect(bodies.every((body) => body.max_tokens === 1024)).toBe(true);
+    expect(bodies.every((body) => body.stream === true)).toBe(true);
+    expect(bodies.every((body) => body.response_format === undefined)).toBe(true);
+    expect(bodies.every((body) => body.thinking?.type === "disabled")).toBe(true);
+    expect(bodies.every((body) => body.chat_template_kwargs === undefined)).toBe(true);
+    expect(bodies.every((body) => body.reasoning_effort === undefined)).toBe(true);
+    const firstPrompt = bodies[0].messages.map((message: { content: string }) => message.content).join("\n");
+    expect(firstPrompt).toContain("Skill风格: 焚锋");
+    expect(firstPrompt).toContain("用户意图最高");
+    expect(firstPrompt).toContain("系统会裁剪过长部分");
+    expect(firstPrompt).not.toContain("硬性字数");
+    expect(firstPrompt).not.toContain("style_profile.json");
+    expect(firstPrompt).not.toContain("/no_think");
+  });
+
+  it("uses model-written compact repair prompts when OpenCode DeepSeek primary attempts are reasoning-only", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenCode Go",
+        model_name: "deepseek-v4-flash",
+        base_url: "https://opencode.ai/zen/go/v1",
+        api_key: "sk-generation-opencode-compact-repair",
+        api_protocol: "openai_chat",
+        is_default: true,
+      },
+    });
+    const repairOutputs = [
+      "补位候选一来自模型：目标把复杂伤害压成身体疲惫，等于绕开长期控制、金钱索取和心理崩塌。吃饭睡觉当然重要，但它解释不了一个人如何被持续消耗到绝望，这个因果链不能被一句生活状态盖过去，也不能替关系里的责任脱身。",
+      "补位候选二来自模型：说到底，这种说法把关系里的操控和压榨拆成没吃好没睡好，听上去像关心，实际是在替核心问题卸责。真正该追问的是谁在持续索取，谁把人逼到只能崩溃，而不是把伤害塞回作息表里轻轻抹掉。",
+      "补位候选三来自模型：如果补觉吃饭就能解释一切，那情感勒索和经济榨取都成了作息管理。可胖猫承受的是长期被控制后的精神坍塌，不是普通疲劳，拿身体状态概括就是偷换概念，也是在遮住真正的压迫来源。",
+    ];
+    let callIndex = 0;
+    const fetchMock = vi.fn(async () => {
+      const index = callIndex++;
+      if (index < 16) {
+        return openAiStreamText("", {
+          finishReason: "length",
+          reasoningContent: "模型一直在推理，没有给最终可见候选。",
+        });
+      }
+      return openAiStreamText(repairOutputs[(index - 16) % repairOutputs.length]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测 OpenCode reasoning-only 后补位" },
+        context: { pageTitle: "讨论", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "wenyan_attack", lengthMode: "自定义", customLengthTarget: 100, ammoBoxIds: [] },
+      },
+    });
+
+    expect(response.candidates).toHaveLength(3);
+    expect(response.candidates.every((candidate) => repairOutputs.some((output) => output.includes(candidate)))).toBe(true);
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(16);
+    const bodies = (fetchMock.mock.calls as unknown as Array<[string, { body: string }]>)
+      .map(([, init]) => JSON.parse(String(init.body)));
+    const repairPrompts = bodies.slice(16).map((body) =>
+      body.messages.map((message: { content: string }) => message.content).join("\n")
+    );
+    expect(repairPrompts.some((prompt) => prompt.includes("补足缺失候选"))).toBe(true);
+    expect(repairPrompts.some((prompt) => prompt.includes("至少 94") && prompt.includes("不超过 110"))).toBe(true);
+    expect(bodies.every((body) => body.response_format === undefined)).toBe(true);
+    expect(bodies.every((body) => body.thinking?.type === "disabled")).toBe(true);
+    expect(bodies.every((body) => body.chat_template_kwargs === undefined)).toBe(true);
+    expect(bodies.every((body) => body.reasoning_effort === undefined)).toBe(true);
+  });
+
+  it("repairs model candidates that are far shorter than a custom target length", async () => {
     await handleExtensionMessage({
       type: "models:save",
       payload: {
@@ -1812,18 +2061,14 @@ describe("extension background API handlers", () => {
       },
     });
     const repaired = [
-      "你先把前提补完整，再谈这个结论是不是站得住，不然只是把情绪包装成判断。",
-      "问题不是你态度够不够硬，而是证据链断在中间，结论自然没有说服力。",
-      "别急着给别人扣帽子，先把定义、证据和推理顺序摆出来，讨论才有意义。",
+      "先别急着甩出结论，你先把前提补完整——证据链是怎么衔接的，推理在哪一步跳了，这些都摆出来再说服人。",
+      "问题不是对方态度够不够硬，而是中间缺了关键推导步骤，一个前提跳到另一个结论中间到底省略了什么根本没人知道。",
+      "扣帽子太容易了，但把定义说清楚、把证据排出来、推理顺序交代明白，才轮得到别人判断你对还是错，这就是最基础的论证规则。",
     ];
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(openAiStreamText(candidateJson(["证据呢", "补前提", "别跳步"])))
       .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ choices: [{ message: { content: "证据呢\n补前提\n别跳步" } }] }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ choices: [{ message: { content: repaired.join("\n") } }] }),
+        ...openAiStreamText(candidateJson(repaired)),
       });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -1845,9 +2090,531 @@ describe("extension background API handlers", () => {
     const repairPrompt = repairBody.messages.map((message: { content: string }) => message.content).join("\n");
     expect(repairPrompt).toContain("目标 50 个汉字");
     expect(repairPrompt).toContain("44 到 60 个汉字");
+    expect(repairPrompt).toContain("候选长度");
+    expect(repairPrompt).toContain("要求范围=44-60");
+    expect(repairPrompt).toContain("上次不合格候选");
+    expect(repairPrompt).toContain("证据呢");
   });
 
-  it("keeps Skill tryout fallback replies within custom target length bounds", async () => {
+  it("tells long custom repair attempts to meet the final range without over-expanding", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-expand-underlength",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(openAiStreamText(candidateJson([
+        "甲".repeat(80),
+        "乙".repeat(81),
+        "丙".repeat(82),
+        "丁".repeat(83),
+      ])))
+      .mockResolvedValueOnce(openAiStreamText(candidateJson([
+        "戊".repeat(118),
+        "己".repeat(116),
+        "庚".repeat(115),
+        "辛".repeat(114),
+      ])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测长目标修复扩写" },
+        context: { pageTitle: "讨论", nearbyComments: [] },
+        intent: "克制反驳",
+        settings: { activeSkillId: "restrained_breakdown", lengthMode: "自定义", customLengthTarget: 100, ammoBoxIds: [] },
+      },
+    });
+
+    expect(response.candidates.map((candidate) => [...candidate].length)).toEqual([110, 110, 110]);
+    const repairBody = JSON.parse(String((fetchMock.mock.calls[1][1] as { body: string }).body));
+    const repairPrompt = repairBody.messages.map((message: { content: string }) => message.content).join("\n");
+    expect(repairPrompt).toContain("上次候选只有 80-83 字");
+    expect(repairPrompt).toContain("补到 94-110 个汉字");
+    expect(repairPrompt).toContain("补一个具体点或因果解释");
+    expect(repairPrompt).not.toContain("每条至少再补 80 个汉字");
+    expect(repairPrompt).not.toContain("按 160-180 字写");
+    expect(repairPrompt).not.toContain("Selected Sample:");
+    expect(repairPrompt).not.toContain("style_profile.json");
+  });
+
+  it("includes a short token budget and free-text 4-candidate requirement in generation request body", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-regression",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn(async () => openAiStreamText(candidateJson([
+      "先把证据补齐再说话。",
+      "前提没立住就别下结论。",
+      "这是逻辑问题不是态度问题。",
+    ])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测请求体" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "短", ammoBoxIds: [] },
+      },
+    });
+
+    const requestCalls = fetchMock.mock.calls as unknown as Array<[string, { body: string }]>;
+    const body = JSON.parse(String(requestCalls[0][1].body));
+    expect(body.max_tokens).toBe(512);
+    expect(body.stream).toBe(true);
+    expect(body.response_format).toBeUndefined();
+    const prompt = body.messages.map((message: { content: string }) => message.content).join("\n");
+    expect(prompt).toContain("输出 4 条候选");
+    expect(prompt).toContain("每条候选独立一行");
+    expect(prompt).toContain("以 1.、2.、3.、4. 开头");
+    expect(prompt).toContain("用户意图是最高优先级");
+    expect(prompt).not.toContain("/no_think");
+    expect(prompt).toContain("系统只采纳前 3 条合格候选");
+  });
+
+  it("parses free-text plain, numbered, and bullet candidate lines", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-free-text",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn(async () => openAiStreamText([
+      "1. 先把证据链补齐，再谈态度。",
+      "- 前提还没站住，结论就别急着飞。",
+      "• 这不是观点尖锐，是推理中间断了一截。",
+      "第四条留给系统备用，不会先展示。",
+    ].join("\n")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测自由文本解析" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "展开", ammoBoxIds: [] },
+      },
+    });
+
+    expect(response.candidates).toEqual([
+      "先把证据链补齐，再谈态度。",
+      "前提还没站住，结论就别急着飞。",
+      "这不是观点尖锐，是推理中间断了一截。",
+    ]);
+    const requestCalls = fetchMock.mock.calls as unknown as Array<[string, { body: string }]>;
+    const requestBody = JSON.parse(String(requestCalls[0][1].body));
+    expect(requestBody.response_format).toBeUndefined();
+  });
+
+  it("parses numbered candidates when the model puts them on one line", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-inline-numbered",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn(async () => openAiStreamText(
+      "1. 先把证据链补齐，再谈态度。 2. 前提还没站住，结论就别急着飞。 3. 这不是观点尖锐，是推理中间断了一截。 4. 第四条留给系统备用，不会先展示。",
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测同一行编号解析" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "展开", ammoBoxIds: [] },
+      },
+    });
+
+    expect(response.candidates).toEqual([
+      "先把证据链补齐，再谈态度。",
+      "前提还没站住，结论就别急着飞。",
+      "这不是观点尖锐，是推理中间断了一截。",
+    ]);
+  });
+
+  it("trims slightly overlong custom-length model candidates without fabricating replacements", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-trim-custom-overlong",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn(async () => openAiStreamText(candidateJson([
+      "甲".repeat(113),
+      "乙".repeat(115),
+      "丙".repeat(108),
+    ])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测只裁剪模型原文" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "自定义", customLengthTarget: 100, ammoBoxIds: [] },
+      },
+    });
+
+    expect(response.candidates.map((candidate) => [...candidate].length)).toEqual([110, 110, 108]);
+    expect(response.candidates[0]).toBe("甲".repeat(110));
+    expect(response.candidates[1]).toBe("乙".repeat(110));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries generation when the first streaming response has reasoning but empty final content", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-empty-content-retry",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(openAiStreamText("", { reasoningContent: "我还在分析，没有给最终答案。" }))
+      .mockResolvedValueOnce(openAiStreamText(candidateJson([
+        "先把证据补齐再说话。",
+        "前提没立住就别下结论。",
+        "这是逻辑问题不是态度问题。",
+      ])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测空内容重试" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "短", ammoBoxIds: [] },
+      },
+    });
+
+    expect(response.candidates).toEqual([
+      "先把证据补齐再说话。",
+      "前提没立住就别下结论。",
+      "这是逻辑问题不是态度问题。",
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws instead of falling back locally when reasoning-only output is truncated", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-reasoning-length",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn(async () => openAiStreamText("", {
+      finishReason: "length",
+      reasoningContent: "模型一直在推理，没有给最终可见候选。",
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测 reasoning-only 截断" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "自定义", customLengthTarget: 100, ammoBoxIds: [] },
+      },
+    })).rejects.toThrow("generation_failed:output_truncated");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws instead of falling back locally when the single repair attempt is reasoning-truncated", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-repair-reasoning-length",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(openAiStreamText(candidateJson(["太短"])))
+      .mockResolvedValueOnce(openAiStreamText("", {
+        finishReason: "length",
+        reasoningContent: "修复阶段仍然只输出推理，没有给最终候选。",
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测 repair reasoning-only 截断" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "自定义", customLengthTarget: 100, ammoBoxIds: [] },
+      },
+    })).rejects.toThrow("generation_failed:output_truncated");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries generation when the first request times out", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-timeout-retry",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error("model_request_timeout"))
+      .mockResolvedValueOnce(openAiStreamText(candidateJson([
+        "先把证据补齐再说话。",
+        "前提没立住就别下结论。",
+        "这是逻辑问题不是态度问题。",
+      ])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测超时重试" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "短", ammoBoxIds: [] },
+      },
+    });
+
+    expect(response.candidates).toEqual([
+      "先把证据补齐再说话。",
+      "前提没立住就别下结论。",
+      "这是逻辑问题不是态度问题。",
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses an expanded token budget for custom long generation requests", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-long-budget",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn(async () => openAiStreamText(candidateJson([
+      "甲".repeat(80),
+      "乙".repeat(80),
+      "丙".repeat(80),
+    ])));
+    vi.stubGlobal("fetch", fetchMock);
+    const timeoutSpy = vi.spyOn(globalThis, "setTimeout");
+
+    await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测长文本请求体" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "自定义", customLengthTarget: 80, ammoBoxIds: [] },
+      },
+    });
+
+    const requestCalls = fetchMock.mock.calls as unknown as Array<[string, { body: string }]>;
+    const body = JSON.parse(String(requestCalls[0][1].body));
+    expect(body.max_tokens).toBe(1024);
+    expect(body.stream).toBe(true);
+    expect(timeoutSpy).toHaveBeenCalledWith(expect.any(Function), 180000);
+    timeoutSpy.mockRestore();
+  });
+
+  it("caps ultra-long custom generation requests at the largest dynamic budget", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-ultra-budget",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn(async () => openAiStreamText(candidateJson([
+      "甲".repeat(150),
+      "乙".repeat(150),
+      "丙".repeat(150),
+    ])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "检测超长文本请求体" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "自定义", customLengthTarget: 150, ammoBoxIds: [] },
+      },
+    });
+
+    const requestCalls = fetchMock.mock.calls as unknown as Array<[string, { body: string }]>;
+    const body = JSON.parse(String(requestCalls[0][1].body));
+    expect(body.max_tokens).toBe(1536);
+  });
+
+  it("generation throws visible error when model is configured but request fails", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-error-bubble",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: { message: "internal server error" } }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      handleExtensionMessage({
+        type: "generation:generateCandidates",
+        payload: {
+          platform: "zhihu",
+          target: { id: "t1", text: "测试错误冒泡" },
+          context: { pageTitle: "测试", nearbyComments: [] },
+          intent: "反驳",
+          settings: { activeSkillId: "full_fire", lengthMode: "短", ammoBoxIds: [] },
+        },
+      }),
+    ).rejects.toThrow("model_request_failed");
+  });
+
+  it("repair prompt shows meaningful message when no candidates passed first attempt", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-repair-empty-candidates",
+        is_default: true,
+      },
+    });
+    const repaired = [
+      "先补证据，再谈结论。",
+      "前提没立住，别急着判。",
+      "逻辑链断了，先补上。",
+    ];
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(openAiStreamText(candidateJson(["测试空候选文案", "测试空候选文案", "测试空候选文案"])))
+      .mockResolvedValueOnce({
+        ...openAiStreamText(candidateJson(repaired)),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "测试空候选文案" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "短", ammoBoxIds: [] },
+      },
+    });
+
+    const repairBody = JSON.parse(String((fetchMock.mock.calls[1][1] as { body: string }).body));
+    const repairPrompt = repairBody.messages.map((message: { content: string }) => message.content).join("\n");
+    expect(repairPrompt).toContain("首次生成全部不满足要求");
+  });
+
+  it("throws a visible insufficient-candidates error after one repair attempt", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-insufficient-fallback",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(openAiStreamText(candidateJson(["先补证据"])))
+      .mockResolvedValueOnce({
+        ...openAiStreamText(candidateJson(["这条候选故意写得很长很长很长超过短句限制", "这条候选也故意写得很长很长很长超过短句限制"])),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "你就是不懂装懂" },
+        context: { pageTitle: "测试", nearbyComments: [] },
+        intent: "反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "短", ammoBoxIds: [] },
+      },
+    })).rejects.toThrow("generation_failed:insufficient_candidates");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws instead of returning a Skill tryout fallback when no model reply is available", async () => {
     const saved = await handleExtensionMessage({
       type: "models:save",
       payload: {
@@ -1883,7 +2650,7 @@ describe("extension background API handlers", () => {
     });
     await handleExtensionMessage({ type: "models:delete", payload: { id: saved.id } });
 
-    const result = await handleExtensionMessage({
+    await expect(handleExtensionMessage({
       type: "skills:runTryout",
       payload: {
         draftId: draft.id,
@@ -1892,10 +2659,7 @@ describe("extension background API handlers", () => {
         lengthMode: "自定义",
         customLengthTarget: 8,
       },
-    });
-
-    expect([...result.reply].length).toBeLessThanOrEqual(8);
-    expect(result.degraded).toBe(true);
+    })).rejects.toThrow("skill_creator_model_required");
   });
 
   it("sends Skill, ammo, source context, target, intent, and length to the model provider", async () => {
@@ -1921,10 +2685,7 @@ describe("extension background API handlers", () => {
         description: "把A问题悄悄换成B问题再下结论。",
       },
     });
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content: "候选一\n候选二\n候选三" } }] }),
-    }));
+    const fetchMock = vi.fn(async () => openAiStreamText(candidateJson(["候选一", "候选二", "候选三"])));
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await handleExtensionMessage({
@@ -1959,6 +2720,63 @@ describe("extension background API handlers", () => {
     expect(prompt).toContain("20字以内");
   });
 
+  it("guards only overlong generation prompts while preserving Skill guidance", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenAI",
+        model_name: "gpt-test",
+        base_url: "https://api.openai.com/v1",
+        api_key: "sk-generation-overlong-prompt",
+        is_default: true,
+      },
+    });
+    const ammoBox = await handleExtensionMessage({
+      type: "ammo:createBox",
+      payload: { name: "超长弹药", category: "knowledge", description: "压测 prompt" },
+    });
+    for (let index = 0; index < 20; index += 1) {
+      await handleExtensionMessage({
+        type: "ammo:addEntry",
+        payload: {
+          boxId: ammoBox.id,
+          term: `弹药${index}`,
+          description: index === 19 ? "AMMO_TAIL_MARKER".repeat(80) : "冗长弹药描述".repeat(80),
+        },
+      });
+    }
+    const fetchMock = vi.fn(async () => openAiStreamText(candidateJson(["候选一", "候选二", "候选三"])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "你就是不懂装懂" },
+        context: {
+          pageTitle: "如何讨论公共议题",
+          sourceTitle: "公共讨论需要证据",
+          sourceText: "SOURCE_TAIL_MARKER".repeat(300),
+          nearbyComments: [
+            ...Array.from({ length: 45 }, () => "附近评论特别长".repeat(60)),
+            "NEARBY_TAIL_MARKER".repeat(80),
+          ],
+        },
+        intent: "克制反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "展开", ammoBoxIds: [ammoBox.id] },
+      },
+    });
+
+    const requestCalls = fetchMock.mock.calls as unknown as Array<[string, { body: string }]>;
+    const requestBody = JSON.parse(String(requestCalls[0][1].body));
+    const prompt = requestBody.messages.map((message: { content: string }) => message.content).join("\n");
+    expect([...prompt].length).toBeLessThanOrEqual(12000);
+    expect(prompt).toContain("焚锋");
+    expect(prompt).toContain("Direct personal attacks stacked with Chinese fighting slang");
+    expect(prompt).not.toContain("NEARBY_TAIL_MARKER");
+    expect(prompt).not.toContain("AMMO_TAIL_MARKER");
+  });
+
   it("generates candidates through Anthropic-compatible messages providers", async () => {
     await handleExtensionMessage({
       type: "models:save",
@@ -1974,7 +2792,7 @@ describe("extension background API handlers", () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        content: [{ type: "text", text: "候选一\n候选二\n候选三" }],
+        content: [{ type: "text", text: candidateJson(["候选一", "候选二", "候选三"]) }],
       }),
     }));
     vi.stubGlobal("fetch", fetchMock);
@@ -1999,6 +2817,60 @@ describe("extension background API handlers", () => {
     expect(requestBody.messages[0].content).toContain("你这个前提不成立");
   });
 
+  it("falls back to OpenCode messages when generation chat completions are unavailable", async () => {
+    await handleExtensionMessage({
+      type: "models:save",
+      payload: {
+        provider: "OpenCode Go",
+        model_name: "deepseek-v4-flash",
+        base_url: "https://opencode.ai/zen/go/v1",
+        api_key: "sk-generation-opencode-fallback",
+        api_protocol: "openai_chat",
+        is_default: true,
+      },
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/chat/completions")) {
+        return {
+          ok: false,
+          status: 404,
+          json: async () => ({ error: { message: "not found" } }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [{ type: "text", text: candidateJson(["候选一", "候选二", "候选三"]) }],
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleExtensionMessage({
+      type: "generation:generateCandidates",
+      payload: {
+        platform: "zhihu",
+        target: { id: "t1", text: "你这个前提不成立" },
+        context: { pageTitle: "讨论", nearbyComments: [] },
+        intent: "克制反驳",
+        settings: { activeSkillId: "full_fire", lengthMode: "短", ammoBoxIds: [] },
+      },
+    });
+
+    expect(response.candidates).toEqual(["候选一", "候选二", "候选三"]);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://opencode.ai/zen/go/v1/chat/completions",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://opencode.ai/zen/go/v1/messages",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("repairs repeated or over-length model candidates using explicit length constraints", async () => {
     await handleExtensionMessage({
       type: "models:save",
@@ -2013,18 +2885,10 @@ describe("extension background API handlers", () => {
     });
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          choices: [{ message: { content: "你就是不懂装懂\n这句话特别特别特别长超过限制" } }],
-        }),
+        ...openAiStreamText(candidateJson(["你就是不懂装懂", "这句话特别特别特别长超过限制"])),
       })
       .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          choices: [{ message: { content: "证据呢\n先补前提\n别跳结论" } }],
-        }),
+        ...openAiStreamText(candidateJson(["证据呢", "先补前提", "别跳结论"])),
       });
     vi.stubGlobal("fetch", fetchMock);
 

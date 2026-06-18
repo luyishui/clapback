@@ -292,6 +292,125 @@ const CONTENT_CSS = `
     outline: none;
   }
 
+  /* === 生成阶段动效(起墨中 / 封笔中) ===
+     design.md §8: ink spreading on paper, but fast; no large spinner.
+     所有 keyframes 在 @media (prefers-reduced-motion: reduce) 下被
+     文件末尾的全局守护规则强制瞬时(design.md §8 / a11y CRITICAL)。 */
+
+  .clapback-ink-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 8px;
+    color: var(--clapback-ink-light);
+  }
+
+  .clapback-ink-loading__visual {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* —— 起墨中:墨滴 + 3 圈错峰晕染扩散 —— */
+  .clapback-ink-ring {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1.5px solid var(--clapback-ink-focus);
+    opacity: 0;
+    animation: clapback-ink-ripple 1.6s var(--clapback-ink-ease, cubic-bezier(0.16, 1, 0.3, 1)) infinite;
+  }
+
+  .clapback-ink-ring--1 { animation-delay: 0s; }
+  .clapback-ink-ring--2 { animation-delay: 0.5s; }
+  .clapback-ink-ring--3 { animation-delay: 1s; }
+
+  .clapback-ink-drop {
+    position: relative;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--clapback-ink-focus);
+    animation: clapback-ink-pulse 1.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+
+  @keyframes clapback-ink-ripple {
+    0%   { transform: scale(0.6); opacity: 0; }
+    20%  { opacity: 0.5; }
+    100% { transform: scale(2.6); opacity: 0; }
+  }
+
+  @keyframes clapback-ink-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.85; }
+    50%      { transform: scale(0.7); opacity: 1; }
+  }
+
+  /* —— 封笔中:印章红方章按下(150ms,--ease-seal 顿挫) —— */
+  .clapback-seal-stamp {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 2px solid var(--clapback-seal-red);
+    border-radius: 4px;
+    background: var(--clapback-seal-red);
+    color: #ffffff;
+    font-family: "Liu Jian Mao Cao", "Ma Shan Zheng", cursive;
+    font-size: 18px;
+    line-height: 1;
+    box-shadow: 0 2px 6px rgba(196, 30, 58, 0.35);
+    transform-origin: center;
+    animation: clapback-seal-stamp 150ms cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
+  @keyframes clapback-seal-stamp {
+    0%   { transform: scale(1.5) rotate(-6deg); opacity: 0; }
+    60%  { transform: scale(0.94) rotate(1.5deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+
+  .clapback-ink-loading__text {
+    font-family: "Ma Shan Zheng", "Zhi Mang Xing", cursive;
+    font-size: 15px;
+    color: var(--clapback-ink-dense);
+    letter-spacing: 0.1em;
+  }
+
+  /* —— 候选结果逐条 reveal(stagger) ——
+     revealCandidates() 给每条 .clapback-candidate 加本类 + animation-delay。
+     入场:淡入 + 轻微上滑(design.md §8 --motion-base --ease-brush)。 */
+  .clapback-candidate--reveal {
+    opacity: 0;
+    animation: clapback-candidate-reveal 220ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  }
+
+  @keyframes clapback-candidate-reveal {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* —— 全局 reduced-motion 守护:生成动效全部瞬时降级 —— */
+  @media (prefers-reduced-motion: reduce) {
+    .clapback-ink-ring,
+    .clapback-ink-drop,
+    .clapback-seal-stamp,
+    .clapback-candidate--reveal {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      animation-delay: 0ms !important;
+      opacity: 1 !important;
+      transform: none !important;
+    }
+  }
+
   .clapback-panel__settings {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(96px, 0.6fr);

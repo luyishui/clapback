@@ -4,6 +4,7 @@ import { injectContentStyles } from "./contentStyles";
 import { injectContentFonts } from "./contentFonts";
 import { buildPanel } from "./buildPanel";
 import { hydratePanelOptions, loadPanelOptions } from "./panelOptions";
+import { showInkLoading, flashSealStage, revealCandidates } from "./generationOverlay";
 
 type AttachOptions = {
   runtime?: RuntimeClient;
@@ -229,7 +230,7 @@ function openPanel(comment: CommentTarget, settings: ClapbackSettings, runtime: 
 
   panel.generate.addEventListener("click", async () => {
     panel.generate.disabled = true;
-    panel.candidates.textContent = "起墨中...";
+    showInkLoading(panel.candidates, "ink");
     try {
       const request: GenerateRequest = {
         platform: "xiaohongshu",
@@ -239,7 +240,10 @@ function openPanel(comment: CommentTarget, settings: ClapbackSettings, runtime: 
         settings: panel.getSettings(),
       };
       const response = await runtime.generate(request);
+      // 封笔中:印章过渡(150ms),再渲染候选
+      await flashSealStage(panel.candidates);
       renderCandidates(panel.candidates, response.candidates, comment.node);
+      revealCandidates(panel.candidates);
     } catch (error) {
       panel.candidates.textContent = error instanceof Error ? error.message : "生成失败，请检查扩展后台。";
     } finally {

@@ -61,6 +61,7 @@ const DEFAULT_MODEL_HOST_PERMISSION_PATTERNS = new Set([
   "https://api.anthropic.com/*",
   "https://api.deepseek.com/*",
   "https://api.moonshot.cn/*",
+  "https://opencode.ai/*",
 ]);
 
 export function SettingsPage({

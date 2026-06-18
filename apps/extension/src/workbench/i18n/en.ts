@@ -187,7 +187,7 @@ export const en: Record<string, string> = {
   "creator.errorModelUnauthorized": "Model request was rejected. Check the API key or permissions.",
   "creator.errorModelRateLimited": "Model requests are rate limited. Try again later.",
   "creator.errorModelRequestFailed": "Model request failed. Check the network or model configuration.",
-  "creator.errorTryoutTooShort": "Model reply was below the target length, so a usable reply was substituted.",
+  "creator.errorTryoutTooShort": "Model reply is below the target length. Adjust the target or retry.",
   "creator.errorMaterialInsufficient": "Not enough material. Add more usable samples first.",
   "creator.errorInvalidOutput": "The model returned an invalid Skill. Try again.",
   "creator.errorFeedbackLimit": "Feedback rebuild is limited to 3 times.",

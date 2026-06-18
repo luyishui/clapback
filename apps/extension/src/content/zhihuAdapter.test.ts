@@ -84,7 +84,7 @@ describe("Zhihu DOM adapter", () => {
     expect(panel?.textContent).toContain("这类 AI 回复工具只会让讨论更糟。");
     expect(panel?.querySelector<HTMLButtonElement>(".clapback-generate")?.textContent).toContain("生成");
     expect(panel?.querySelector<HTMLSelectElement>(".clapback-skill-select")?.value).toBe("默认高压嘴替");
-    expect(panel?.querySelector<HTMLSelectElement>(".clapback-length-select")?.value).toBe("短");
+    expect(panel?.querySelector<HTMLInputElement>(".clapback-custom-length")?.value).toBe("20");
     expect(panel?.querySelector<HTMLSelectElement>(".clapback-ammo-select")?.multiple).toBe(true);
     expect(panel?.textContent).not.toContain("阴阳怪气");
     expect(document.activeElement).toBe(input);
@@ -106,7 +106,7 @@ describe("Zhihu DOM adapter", () => {
     expect(settingsPanel.textContent).toContain("弹药箱");
     expect(settingsPanel.textContent).not.toContain("阴阳怪气");
     expect(settingsPanel.textContent).not.toContain("梗已开");
-    expect(settingsPanel.textContent).toContain("短");
+    expect(settingsPanel.textContent).toContain("目标字数");
   });
 
   it("calls background generation with locked target and shows three candidates", async () => {
@@ -140,7 +140,7 @@ describe("Zhihu DOM adapter", () => {
         nearbyComments: ["如果能保持不自动发布，我倒觉得可以试试。"],
       }),
       intent: "反驳工具原罪",
-      settings: expect.objectContaining({ activeSkillId: "My Voice", lengthMode: "中", ammoBoxIds: [] }),
+      settings: expect.objectContaining({ activeSkillId: "My Voice", lengthMode: "自定义", customLengthTarget: 20, ammoBoxIds: [] }),
     });
   });
 
@@ -158,7 +158,7 @@ describe("Zhihu DOM adapter", () => {
     const skillSelect = document.querySelector<HTMLSelectElement>(".clapback-skill-select")!;
     skillSelect.append(new Option("火力全开", "full_fire"));
     skillSelect.value = "full_fire";
-    document.querySelector<HTMLSelectElement>(".clapback-length-select")!.value = "展开";
+    document.querySelector<HTMLInputElement>(".clapback-custom-length")!.value = "90";
     const ammoSelect = document.querySelector<HTMLSelectElement>(".clapback-ammo-select")!;
     ammoSelect.append(new Option("法律常识", "7"));
     ammoSelect.append(new Option("热梗", "9"));
@@ -172,7 +172,8 @@ describe("Zhihu DOM adapter", () => {
 
     expect(generate.mock.calls[0][0].settings).toEqual({
       activeSkillId: "full_fire",
-      lengthMode: "展开",
+      lengthMode: "自定义",
+      customLengthTarget: 90,
       ammoBoxIds: [7, 9],
     });
   });
@@ -188,8 +189,6 @@ describe("Zhihu DOM adapter", () => {
     });
 
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
-    document.querySelector<HTMLSelectElement>(".clapback-length-select")!.value = "自定义";
-    document.querySelector<HTMLSelectElement>(".clapback-length-select")!.dispatchEvent(new Event("change", { bubbles: true }));
     const customLength = document.querySelector<HTMLInputElement>(".clapback-custom-length")!;
     customLength.value = "26";
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
@@ -247,6 +246,46 @@ describe("Zhihu DOM adapter", () => {
     expect(generate.mock.calls[0][0].context.sourceText).toContain("Transformer 一篇论文八个作者");
     expect(generate.mock.calls[0][0].context.sourceText).toContain("2017 年春天");
     expect(generate.mock.calls[0][0].context.sourceText).not.toContain("下一张卡不应进入上下文");
+  });
+
+  it("does not send unrelated Zhihu answer bodies as nearby comments for an answer target", async () => {
+    const generate = vi.fn().mockResolvedValue({ candidates: ["候选一", "候选二", "候选三"] });
+    document.body.innerHTML = `
+      <main>
+        <div class="AnswerItem" id="answer-one">
+          <h2 class="ContentItem-title">传销话术为什么有效</h2>
+          <div class="RichContent-inner">主回答正文只讨论传销话术和脆弱时刻，不涉及其他回答的例子。</div>
+          <div class="ContentItem-actions">
+            <button>赞同</button>
+            <button>评论</button>
+            <button>分享</button>
+          </div>
+        </div>
+        <div class="AnswerItem" id="answer-two">
+          <h2 class="ContentItem-title">另一个无关回答</h2>
+          <div class="RichContent-inner">胖猫、驴肉火烧、罗素和尼采这些内容只属于另一个回答。</div>
+          <div class="ContentItem-actions">
+            <button>赞同</button>
+            <button>评论</button>
+            <button>分享</button>
+          </div>
+        </div>
+      </main>
+    `;
+
+    attachZhihuClapback({ runtime: { generate } });
+    document.querySelector<HTMLButtonElement>("#answer-one .clapback-trigger")?.click();
+    document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
+
+    await vi.waitFor(() => {
+      expect(generate).toHaveBeenCalled();
+    });
+
+    const request = generate.mock.calls[0][0];
+    expect(request.target.text).toContain("主回答正文");
+    expect(request.context.sourceText).toContain("主回答正文");
+    expect(request.context.sourceText).not.toContain("胖猫");
+    expect(request.context.nearbyComments).toEqual([]);
   });
 
   it("shows an error and no selectable candidates when generation returns fewer than three candidates", async () => {
@@ -361,6 +400,8 @@ describe("Zhihu DOM adapter", () => {
     const publish = vi.fn();
     document.querySelector<HTMLButtonElement>(".PublishButton")?.addEventListener("click", publish);
     const generate = vi.fn().mockResolvedValue({ candidates: ["只应该属于 root-1。", "候选二", "候选三"] });
+    const writeText = vi.fn().mockRejectedValue(new Error("clipboard denied"));
+    Object.assign(navigator, { clipboard: { writeText } });
 
     attachZhihuClapback({ runtime: { generate } });
 
@@ -371,9 +412,9 @@ describe("Zhihu DOM adapter", () => {
       expect(document.querySelectorAll(".clapback-candidate")).toHaveLength(3);
     });
 
-    document
-      .querySelector<HTMLButtonElement>(".clapback-candidate")
-      ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const first = document.querySelector<HTMLButtonElement>(".clapback-candidate")!;
+    first.click();
+    first.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
 
     await vi.waitFor(() => {
       expect(document.querySelector<HTMLElement>(".clapback-panel__candidates")?.dataset.clapbackStatus).toBe("copied");

@@ -323,6 +323,25 @@ describe("Workbench App", () => {
     expect((screen.getByLabelText("接口协议") as HTMLSelectElement).value).toBe("openai_chat");
   });
 
+  it("tests the OpenCode preset without requesting optional host permission", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: "pong" } }] }),
+    })));
+    render(<App />);
+
+    const addButtons = await screen.findAllByRole("button", { name: "添加模型配置" });
+    await userEvent.click(addButtons[0]);
+    await userEvent.selectOptions(screen.getByLabelText("模型厂商"), "OpenCode Go");
+    await userEvent.type(screen.getByLabelText("API Key"), "sk-opencode-test");
+    await userEvent.click(screen.getByRole("button", { name: "测试连接" }));
+
+    expect(await screen.findByText("连接成功")).toBeTruthy();
+    expect(chrome.permissions?.contains).not.toHaveBeenCalled();
+    expect(chrome.permissions?.request).not.toHaveBeenCalled();
+  });
+
   it("tests a saved model connection from the model table", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -549,6 +568,46 @@ describe("Workbench App", () => {
     });
   });
 
+  it("keeps creation stages visible for animation frames before generating the draft", async () => {
+    const creationFrames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      creationFrames.push(callback);
+      return creationFrames.length;
+    }));
+    await seedCreatorModel({ deferDraft: true });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("tab", { name: "技能工坊" }));
+    await userEvent.type(screen.getByLabelText("创建目标"), "creator goal");
+    await userEvent.click(await screen.findByLabelText("知乎大V素材"));
+    await userEvent.click(screen.getByRole("button", { name: "创建技能" }));
+
+    async function flushCreationFrame() {
+      const frame = creationFrames.shift();
+      expect(frame).toBeTruthy();
+      await act(async () => {
+        frame?.(performance.now());
+        await Promise.resolve();
+      });
+    }
+
+    expect(activeCreationStage()).toContain("校验素材");
+    expect(messages.some((message) => message.type === "skills:createDraft")).toBe(false);
+
+    await flushCreationFrame();
+    expect(activeCreationStage()).toContain("读取素材");
+    expect(messages.some((message) => message.type === "skills:createDraft")).toBe(false);
+
+    await flushCreationFrame();
+    expect(activeCreationStage()).toContain("生成草稿");
+    expect(messages.some((message) => message.type === "skills:createDraft")).toBe(false);
+
+    await flushCreationFrame();
+    await waitFor(() => {
+      expect(messages.some((message) => message.type === "skills:createDraft")).toBe(true);
+    });
+  });
+
   it("shows a recoverable creation failure reason when Skill Creator lacks a model", async () => {
     render(<App />);
 
@@ -718,7 +777,7 @@ describe("Workbench App", () => {
     model.resolveTryout();
   });
 
-  it("shows the degraded tryout reason when model fallback is used", async () => {
+  it("shows a recoverable tryout error when the model request fails", async () => {
     await seedCreatorModel();
     render(<App />);
 
@@ -738,10 +797,11 @@ describe("Workbench App", () => {
     await userEvent.type(screen.getByPlaceholderText("输入任意言论..."), "这个观点没问题");
     await userEvent.click(screen.getByRole("button", { name: "发送试打" }));
 
-    expect(await screen.findByText("已降级：模型请求被拒绝，请检查 API Key 或权限")).toBeTruthy();
+    expect((await screen.findAllByText("模型请求被拒绝，请检查 API Key 或权限")).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/已降级/)).toBeNull();
   });
 
-  it.skip("shows a degraded tryout reason when the model reply is below the target length", async () => {
+  it("shows a recoverable tryout error when the model reply is below the target length", async () => {
     await seedCreatorModel();
     render(<App />);
 
@@ -760,7 +820,8 @@ describe("Workbench App", () => {
     await userEvent.type(screen.getByPlaceholderText("输入任意言论..."), "这个观点没问题");
     await userEvent.click(screen.getByRole("button", { name: "发送试打" }));
 
-    expect(await screen.findByText("已降级：模型回复低于目标字数，已改用可用回复")).toBeTruthy();
+    expect((await screen.findAllByText("模型回复低于目标字数，请调整目标或重试")).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/已降级/)).toBeNull();
   });
 
   it("keeps a recoverable failed tryout bubble when the tryout request fails", async () => {

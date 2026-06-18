@@ -4,15 +4,35 @@ import { attachXiaohongshuClapback } from "./xiaohongshuAdapter";
 import { injectGlobalTrigger } from "./globalTrigger";
 import { attachCollectionToolbar } from "./collectionToolbar";
 
-const host = location.hostname;
+type ContentBootstrapDeps = {
+  host: string;
+  attachZhihuClapback: typeof attachZhihuClapback;
+  attachWeiboClapback: typeof attachWeiboClapback;
+  attachXiaohongshuClapback: typeof attachXiaohongshuClapback;
+  injectGlobalTrigger: typeof injectGlobalTrigger;
+  attachCollectionToolbar: typeof attachCollectionToolbar;
+};
 
-if (host.includes("zhihu")) {
-  attachZhihuClapback();
-} else if (host.includes("weibo")) {
-  attachWeiboClapback();
-} else if (host.includes("xiaohongshu")) {
-  attachXiaohongshuClapback();
+export function initializeContent(deps: ContentBootstrapDeps = {
+  host: location.hostname,
+  attachZhihuClapback,
+  attachWeiboClapback,
+  attachXiaohongshuClapback,
+  injectGlobalTrigger,
+  attachCollectionToolbar,
+}): void {
+  if (deps.host.includes("zhihu")) {
+    deps.attachZhihuClapback();
+  } else if (deps.host.includes("weibo")) {
+    deps.attachWeiboClapback();
+  } else if (deps.host.includes("xiaohongshu")) {
+    deps.attachXiaohongshuClapback();
+  }
+
+  deps.injectGlobalTrigger();
+  void deps.attachCollectionToolbar().catch(() => {
+    // Collection mode is optional; normal reply generation should still load if the background is waking up.
+  });
 }
 
-injectGlobalTrigger();
-void attachCollectionToolbar();
+initializeContent();

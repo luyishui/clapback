@@ -31,6 +31,16 @@ const CREATION_STAGE_KEYS = [
   "creator.stageEnterTryout",
 ] as const;
 
+function waitForCreationStageFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+      return;
+    }
+    setTimeout(resolve, 16);
+  });
+}
+
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -148,12 +158,13 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
     setCreationStageIndex(currentStage);
     setCreatorError("");
     try {
-      await Promise.resolve();
+      await waitForCreationStageFrame();
       currentStage = 1;
       setCreationStageIndex(currentStage);
-      await Promise.resolve();
+      await waitForCreationStageFrame();
       currentStage = 2;
       setCreationStageIndex(currentStage);
+      await waitForCreationStageFrame();
       const next = await runtimeApi.createSkillDraft({
         source_box_ids: Array.from(selectedBoxes),
         skill_name: skillName.trim() || "Clapback Skill",
@@ -161,7 +172,7 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
       });
       currentStage = 3;
       setCreationStageIndex(currentStage);
-      await Promise.resolve();
+      await waitForCreationStageFrame();
       currentStage = 4;
       setCreationStageIndex(currentStage);
       setDraft(next);

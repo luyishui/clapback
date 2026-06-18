@@ -3,7 +3,6 @@ import {
   CUSTOM_LENGTH_DEFAULT_TARGET,
   CUSTOM_LENGTH_MAX_CHARS,
   CUSTOM_LENGTH_MODE,
-  LENGTH_OPTIONS,
   sanitizeCustomLengthTarget,
 } from "../api/lengthConstraints";
 
@@ -60,10 +59,7 @@ export function buildPanel(options: BuildPanelOptions): PanelHandle {
         </select>
       </label>
       <label class="clapback-panel__field">
-        <span>长短</span>
-        <select class="clapback-panel__select clapback-length-select" aria-label="长短">
-          ${LENGTH_OPTIONS.map((length) => optionHtml(length, length, length === options.settings.lengthMode)).join("")}
-        </select>
+        <span>目标字数</span>
         <input
           class="clapback-custom-length"
           type="number"
@@ -72,7 +68,6 @@ export function buildPanel(options: BuildPanelOptions): PanelHandle {
           step="1"
           value="${customLengthTarget}"
           aria-label="目标字数"
-          ${options.settings.lengthMode === CUSTOM_LENGTH_MODE ? "" : " hidden"}
         >
       </label>
       <label class="clapback-panel__field clapback-panel__field--ammo">
@@ -97,16 +92,13 @@ export function buildPanel(options: BuildPanelOptions): PanelHandle {
   const candidates = root.querySelector<HTMLElement>(".clapback-panel__candidates")!;
   const settingsPanel = root.querySelector<HTMLElement>(".clapback-panel__settings")!;
   const skillSelect = root.querySelector<HTMLSelectElement>(".clapback-skill-select")!;
-  const lengthSelect = root.querySelector<HTMLSelectElement>(".clapback-length-select")!;
+  const lengthSelect = document.createElement("select");
   const customLengthInput = root.querySelector<HTMLInputElement>(".clapback-custom-length")!;
   const ammoSelect = root.querySelector<HTMLSelectElement>(".clapback-ammo-select")!;
   const ammoChecklist = root.querySelector<HTMLElement>(".clapback-ammo-checklist")!;
   const close = root.querySelector<HTMLButtonElement>(".clapback-panel__close")!;
 
   bindAmmoChecklist(ammoSelect, ammoChecklist);
-  lengthSelect.addEventListener("change", () => {
-    customLengthInput.hidden = lengthSelect.value !== CUSTOM_LENGTH_MODE;
-  });
 
   close.addEventListener("click", () => {
     root.remove();
@@ -129,17 +121,15 @@ export function buildPanel(options: BuildPanelOptions): PanelHandle {
       renderAmmoChecklist(ammoSelect, ammoChecklist);
     },
     getSettings() {
-      const lengthMode = lengthSelect.value || options.settings.lengthMode;
+      const parsed = sanitizeCustomLengthTarget(customLengthInput.value);
       const settings: ClapbackSettings = {
         activeSkillId: skillSelect.value || options.settings.activeSkillId,
-        lengthMode,
+        lengthMode: CUSTOM_LENGTH_MODE,
+        customLengthTarget: parsed ?? customLengthTarget,
         ammoBoxIds: [...ammoSelect.selectedOptions]
           .map((option) => Number(option.value))
           .filter((value) => Number.isInteger(value)),
       };
-      if (lengthMode === CUSTOM_LENGTH_MODE) {
-        settings.customLengthTarget = sanitizeCustomLengthTarget(customLengthInput.value) ?? customLengthTarget;
-      }
       return settings;
     },
   };

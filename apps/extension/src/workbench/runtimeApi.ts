@@ -1,6 +1,8 @@
 import { sendExtensionMessage } from "../api/client";
 import type { ExtensionHealthStatus } from "../api/types";
 
+export type SkillSampleSelections = Record<string, Partial<Record<"短" | "中" | "长", string>>>;
+
 export type RuntimeSettings = {
   base_url: string;
   api_key_set: boolean;
@@ -8,6 +10,7 @@ export type RuntimeSettings = {
   theme: string;
   language?: string;
   skill_tryout_rounds?: number;
+  skill_sample_selections?: SkillSampleSelections;
 };
 
 export type CorpusBox = {
@@ -46,7 +49,7 @@ export type SkillInfo = {
 
 export type SkillDetail = SkillInfo & {
   skill_md: string;
-  sample_outputs: Array<{ prompt?: string; reply?: string; input?: string; output?: string }>;
+  sample_outputs: Array<{ prompt?: string; reply?: string; input?: string; output?: string; lengthBucket?: "短" | "中" | "长" }>;
   files?: Record<string, string>;
   manifest?: Record<string, unknown>;
 };
@@ -164,7 +167,7 @@ export const runtimeApi = {
 
   getSettings: () => sendExtensionMessage("settings:get"),
 
-  saveSettings: (payload: Partial<{ model: string; theme: string; language: string; skill_tryout_rounds: number }>) =>
+  saveSettings: (payload: Partial<{ model: string; theme: string; language: string; skill_tryout_rounds: number; skill_sample_selections: SkillSampleSelections }>) =>
     sendExtensionMessage("settings:save", payload),
 
   listModels: () => sendExtensionMessage("models:list"),

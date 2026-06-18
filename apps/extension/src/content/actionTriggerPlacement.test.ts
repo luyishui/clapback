@@ -662,7 +662,7 @@ describe("comment action trigger placement", () => {
     const panel = document.querySelector<HTMLElement>(".clapback-global-panel")!;
     await vi.waitFor(() => {
       expect(panel.querySelector<HTMLSelectElement>(".clapback-skill-select")?.value).toBe("full_fire");
-      expect(panel.querySelector<HTMLSelectElement>(".clapback-length-select")?.value).toBe("短");
+      expect(panel.querySelector<HTMLInputElement>(".clapback-custom-length")?.value).toBe("20");
       expect(panel.querySelector<HTMLSelectElement>(".clapback-ammo-select")?.hidden).toBe(true);
       expect([...panel.querySelectorAll<HTMLInputElement>(".clapback-ammo-checkbox:checked")].map((item) => item.value)).toEqual(["7"]);
     });

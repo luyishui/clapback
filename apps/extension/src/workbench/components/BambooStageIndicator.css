@@ -1,82 +1,50 @@
-.bamboo-indicator {
-  position: relative;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/*
+ * 水墨毛笔竹指示器样式。
+ *
+ * 描边粗细、笔触圆头由 CSS 给定(模拟毛笔);颜色、透明度、描画进度
+ * (stroke-dashoffset)、变换全部交给 GSAP 接管(见 .tsx)。
+ * 故此文件不做颜色/位移的 transition —— 避免 CSS 与 GSAP 打架。
+ */
+
+.bamboo-svg {
+  display: block;
+  overflow: visible; /* 竹叶撇出 viewBox 时不被裁切 */
 }
 
-.bamboo-node {
-  width: 12px;
-  height: 28px;
-  background: transparent;
-  border: 2px solid rgba(26, 26, 26, 0.15);
-  border-radius: 3px;
-  position: relative;
-  transition: none; /* GSAP接管所有动画 */
+.bamboo-svg__root {
+  /* GSAP rotation 的 transform-origin 锚点 */
+  transform-origin: center bottom;
 }
 
-/* 竹节横线（节点标记） */
-.bamboo-segment::before,
-.bamboo-segment::after {
-  content: "";
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  height: 1px;
-  background: currentColor;
-  opacity: 0.4;
+/* 竹竿:粗一些的圆头描边 = 毛笔中锋 */
+.bamboo-svg__segment {
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
-.bamboo-segment::before {
-  top: 30%;
+/* 竹节横纹(夹在节内的短横线)继承 segment,无需单独样式 */
+
+/* 竹叶:较细的尖头撇笔,fill 由 GSAP 给极淡墨 */
+.bamboo-svg__leaf {
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
-.bamboo-segment::after {
-  top: 70%;
+/*
+ * 失败态:竹竿中部一道裂纹(seal-red)。
+ * 用 SVG 内部不便于加伪元素,这里改为给整株加一层红色 drop-shadow,
+ * 配合 GSAP 的 blur + 缩短,表达"折断"感。
+ */
+.bamboo-svg--cracked .bamboo-svg__root {
+  /* GSAP 已加 blur(0.6px);此处补一抹印章红投影强化断裂 */
+  filter: drop-shadow(0 0 1.4px rgba(196, 30, 58, 0.55));
 }
 
-/* 竹叶容器 */
-.bamboo-leaves {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.bamboo-leaf {
-  position: absolute;
-  width: 8px;
-  height: 14px;
-  background: var(--mountain-green);
-  border-radius: 50% 0;
-  opacity: 0;
-  transform-origin: bottom center;
-  will-change: transform, opacity;
-}
-
-.bamboo-leaf--left {
-  left: -6px;
-  top: 50%;
-  transform: translateY(-50%) rotate(-25deg);
-}
-
-.bamboo-leaf--right {
-  right: -6px;
-  top: 50%;
-  transform: translateY(-50%) rotate(25deg) scaleX(-1);
-}
-
-/* 失败状态：断裂效果 */
-.bamboo-cracked::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 120%;
-  height: 2px;
-  background: var(--seal-red);
-  transform: translate(-50%, -50%) rotate(-8deg);
-  opacity: 0.6;
-  box-shadow: 0 0 4px rgba(196, 30, 58, 0.4);
-}
+/*
+ * 容器尺寸:与旧版保持一致(32 宽),高度略增以容纳撇叶。
+ * CreatorPage 的 .creator-stage-list__item 用 align-items:center 对齐。
+ */

@@ -8,6 +8,7 @@ const MODEL_API_URL_PATTERNS = [
   "https://api.anthropic.com/*",
   "https://api.deepseek.com/*",
   "https://api.moonshot.cn/*",
+  "https://opencode.ai/*",
 ];
 const OPTIONAL_MODEL_API_URL_PATTERNS = ["https://*/*"];
 
