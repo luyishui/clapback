@@ -1,4 +1,4 @@
-import { CheckCircle2, Pencil, PlugZap, Plus, RefreshCw, Save, Search, Trash2 } from "lucide-react";
+import { CheckCircle2, Download, Pencil, PlugZap, Plus, RefreshCw, Save, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Modal } from "../components/Modal";
 import { PageHeader } from "../components/PageHeader";
@@ -14,6 +14,7 @@ import {
   type ModelDetectionResult,
   type ModelOption,
   type RuntimeSettings,
+  type UpdateCheckInfo,
 } from "../runtimeApi";
 import "./SettingsPage.css";
 
@@ -43,6 +44,8 @@ type Props = {
   onModelsChanged: () => void;
   health: HealthStatus | null;
   showToast: (msg: string) => void;
+  /** 启动时静默检查的结果（可选，仅在发现新版本时非空）。 */
+  initialUpdateInfo?: UpdateCheckInfo | null;
 };
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -74,6 +77,7 @@ export function SettingsPage({
   onModelsChanged,
   health,
   showToast,
+  initialUpdateInfo = null,
 }: Props) {
   const { t, language, setLanguage } = useTranslation();
   const [editing, setEditing] = useState<ModelConfig | null>(null);
@@ -83,8 +87,15 @@ export function SettingsPage({
   const [savingTryoutRounds, setSavingTryoutRounds] = useState(false);
   const [testingModelId, setTestingModelId] = useState<number | null>(null);
   const [modelTestStatuses, setModelTestStatuses] = useState<Record<number, string>>({});
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckInfo | null>(initialUpdateInfo);
 
   useEffect(() => { setTryoutRounds(String(settings?.skill_tryout_rounds ?? 3)); }, [settings?.skill_tryout_rounds]);
+  useEffect(() => {
+    if (initialUpdateInfo?.ok && initialUpdateInfo.hasUpdate) {
+      setUpdateInfo(initialUpdateInfo);
+    }
+  }, [initialUpdateInfo]);
 
   const handleLanguageChange = async (next: Language) => {
     setLanguage(next);
@@ -156,6 +167,22 @@ export function SettingsPage({
   };
 
   const isOnline = health?.ok ?? false;
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    try {
+      setUpdateInfo(await runtimeApi.checkUpdate());
+    } catch {
+      setUpdateInfo({ ok: false, error: "update_check_failed" });
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleOpenReleasePage = () => {
+    if (!updateInfo?.ok) return;
+    window.open(updateInfo.releaseUrl, "_blank", "noopener,noreferrer");
+  };
 
   const handleTestSavedModel = async (model: ModelConfig) => {
     setTestingModelId(model.id);
@@ -313,6 +340,75 @@ export function SettingsPage({
             </div>
           </div>
         )}
+      </section>
+
+      <section className="settings-section">
+        <header className="settings-section__header">
+          <div>
+            <h3 className="settings-section__title">{t("settings.about")}</h3>
+            <p className="settings-section__subtitle">{t("settings.aboutSubtitle")}</p>
+          </div>
+          <button
+            className="btn-secondary btn-sm"
+            type="button"
+            onClick={handleCheckUpdate}
+            disabled={checkingUpdate}
+          >
+            <RefreshCw size={14} aria-hidden="true" /> {checkingUpdate ? t("settings.checkingUpdate") : t("settings.checkUpdate")}
+          </button>
+        </header>
+
+        <div className="settings-row settings-row--stackable">
+          <div className="settings-row__label">{t("settings.currentVersion")}</div>
+          <div className="settings-row__control">
+            <span className="settings-version">v{health?.version || updateInfo?.ok && updateInfo.currentVersion || "0.0.0"}</span>
+            {updateInfo && (
+              <div className="settings-update-status" aria-live="polite">
+                {updateInfo.ok ? (
+                  updateInfo.hasUpdate ? (
+                    <>
+                      <p className="settings-update-status__line settings-update-status__line--available">
+                        <Download size={14} aria-hidden="true" />
+                        {t("settings.updateAvailable").replace("{version}", updateInfo.latestVersion)}
+                      </p>
+                      <div className="settings-update-actions">
+                        <button className="btn-secondary btn-sm" type="button" onClick={handleOpenReleasePage}>
+                          {t("settings.viewOnGithub")}
+                        </button>
+                        {updateInfo.mirrors.map((mirror) => (
+                          <a
+                            className="btn-secondary btn-sm settings-update-link"
+                            href={mirror.url}
+                            key={mirror.id}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <Download size={14} aria-hidden="true" /> {t(mirror.labelKey)}
+                          </a>
+                        ))}
+                      </div>
+                      <p className="settings-row__hint settings-row__hint--inline">{t("settings.mirrorHint")}</p>
+                      {updateInfo.releaseNotes && (
+                        <details className="settings-release-notes">
+                          <summary>{t("settings.releaseNotes")}</summary>
+                          <p>{updateInfo.releaseNotes}</p>
+                        </details>
+                      )}
+                    </>
+                  ) : (
+                    <p className="settings-update-status__line settings-update-status__line--ok">
+                      <CheckCircle2 size={14} aria-hidden="true" /> {t("settings.upToDate")}
+                    </p>
+                  )
+                ) : (
+                  <p className="settings-update-status__line settings-update-status__line--error">
+                    {t("settings.updateCheckFailed")}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
       <ModelConfigModal

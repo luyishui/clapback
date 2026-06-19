@@ -1,5 +1,5 @@
 import { sendExtensionMessage } from "../api/client";
-import type { ExtensionHealthStatus } from "../api/types";
+import type { ExtensionHealthStatus, UpdateCheckResult } from "../api/types";
 
 export type SkillSampleSelections = Record<string, Partial<Record<"短" | "中" | "长", string>>>;
 
@@ -55,6 +55,8 @@ export type SkillDetail = SkillInfo & {
 };
 
 export type HealthStatus = ExtensionHealthStatus;
+
+export type UpdateCheckInfo = UpdateCheckResult;
 
 export type ModelApiProtocol = "openai_chat" | "anthropic_messages";
 
@@ -164,6 +166,8 @@ export function getRuntimeBaseUrl(): string {
 
 export const runtimeApi = {
   health: () => sendExtensionMessage("extension:health"),
+
+  checkUpdate: () => sendExtensionMessage("extension:checkUpdate"),
 
   getSettings: () => sendExtensionMessage("settings:get"),
 

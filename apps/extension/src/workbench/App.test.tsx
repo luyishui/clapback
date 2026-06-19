@@ -32,6 +32,12 @@ describe("Workbench App", () => {
     const sendMessage = vi.fn((message: CapturedMessage, callback?: (response: unknown) => void) => {
       const run = async () => {
         messages.push({ type: message.type, payload: message.payload });
+        if (message.type === "extension:checkUpdate") {
+          return {
+            ok: true,
+            data: { ok: true, hasUpdate: false, currentVersion: "0.1.0", latestVersion: "0.1.0" },
+          };
+        }
         try {
           const data = await handleExtensionMessage(message as never);
           return { ok: true, data };
@@ -49,6 +55,7 @@ describe("Workbench App", () => {
     vi.stubGlobal("chrome", {
       runtime: {
         sendMessage,
+        getManifest: () => ({ version: "0.1.0" }),
         getURL: (path: string) => `chrome-extension://test/${path}`,
       },
       storage: {
@@ -136,11 +143,59 @@ describe("Workbench App", () => {
   });
 
   it("shows settings page and extension status by default", async () => {
+    stubCheckUpdate({ ok: true, hasUpdate: false, currentVersion: "0.1.0", latestVersion: "0.1.0" });
     render(<App />);
 
     expect(screen.getByRole("tab", { name: "设置", selected: true })).toBeTruthy();
     expect(screen.getByText("设置", { selector: ".page-header__title" })).toBeTruthy();
     expect(await screen.findByText(/clapback-extension v0.1.0/)).toBeTruthy();
+    expect(await screen.findByText("关于")).toBeTruthy();
+    expect(screen.getByText("当前版本")).toBeTruthy();
+    expect(screen.getByText("v0.1.0")).toBeTruthy();
+    await waitFor(() => {
+      expect(messages).toContainEqual(expect.objectContaining({ type: "extension:checkUpdate" }));
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("checks for updates from the settings about section", async () => {
+    stubCheckUpdate({ ok: true, hasUpdate: false, currentVersion: "0.1.0", latestVersion: "0.1.0" });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "检查更新" }));
+
+    await waitFor(() => {
+      expect(messages.filter((message) => message.type === "extension:checkUpdate").length).toBeGreaterThanOrEqual(2);
+    });
+    expect(await screen.findByText("已是最新版本")).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("shows a silent startup update notice when a newer release exists", async () => {
+    stubCheckUpdate({
+      ok: true,
+      hasUpdate: true,
+      currentVersion: "0.1.0",
+      latestVersion: "0.2.0",
+      tagName: "v0.2.0",
+      releaseUrl: "https://github.com/luyishui/clapback/releases/tag/v0.2.0",
+      releaseNotes: "修复检查更新",
+      source: "github-api",
+      mirrors: [
+        {
+          id: "github",
+          labelKey: "settings.mirrorGithub",
+          url: "https://github.com/luyishui/clapback/releases/download/v0.2.0/clapback-extension-v0.2.0.zip",
+        },
+      ],
+    });
+    render(<App />);
+
+    expect(await screen.findByText("发现新版本 v0.2.0")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "GitHub（直连/需代理）" }).getAttribute("href")).toBe(
+      "https://github.com/luyishui/clapback/releases/download/v0.2.0/clapback-extension-v0.2.0.zip",
+    );
+    expect(screen.getByText("修复检查更新")).toBeTruthy();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -916,6 +971,26 @@ describe("Workbench App", () => {
     expect(detailText).toContain("attack_playbook.json");
     expect(detailText).toContain("classification");
   });
+
+  function stubCheckUpdate(responseData: unknown): void {
+    const sendMessage = chrome.runtime.sendMessage as unknown as {
+      getMockImplementation: () => ((message: CapturedMessage, callback?: (response: unknown) => void) => unknown) | undefined;
+      mockImplementation: (fn: (message: CapturedMessage, callback?: (response: unknown) => void) => unknown) => void;
+    };
+    const originalSendMessage = sendMessage.getMockImplementation();
+    sendMessage.mockImplementation((message, callback) => {
+      if (message.type === "extension:checkUpdate") {
+        messages.push({ type: message.type, payload: message.payload });
+        const response = { ok: true, data: responseData };
+        if (callback) {
+          callback(response);
+          return undefined;
+        }
+        return Promise.resolve(response);
+      }
+      return originalSendMessage?.(message, callback);
+    });
+  }
 
   async function createDraftFromCreator(goal = "creator goal"): Promise<void> {
     await userEvent.click(await screen.findByRole("tab", { name: "技能工坊" }));

@@ -1,6 +1,7 @@
 import type { ExtensionMessage, ExtensionMessageType, ExtensionRequestMap } from "./types";
 import { generateCandidates } from "./generation";
 import { detectModels, testModelConnection } from "./modelConnection";
+import { checkForUpdate } from "./updateCheck";
 import {
   addAmmoEntry,
   addCollectionCandidates,
@@ -45,7 +46,9 @@ export async function handleExtensionMessage<T extends ExtensionMessageType>(
 
   switch (message.type) {
     case "extension:health":
-      return { ok: true, service: "clapback-extension", version: "0.1.0" } as ExtensionRequestMap[T]["response"];
+      return { ok: true, service: "clapback-extension", version: getExtensionVersion() } as ExtensionRequestMap[T]["response"];
+    case "extension:checkUpdate":
+      return checkForUpdate() as Promise<ExtensionRequestMap[T]["response"]>;
     case "settings:get":
       return getSettings() as Promise<ExtensionRequestMap[T]["response"]>;
     case "settings:save":
@@ -288,4 +291,18 @@ function getRuntimeId(): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * 读取扩展自身版本号（来自 manifest，单一真相源）。
+ * 取不到时回退 "0.0.0"，保证 health 响应结构稳定。
+ */
+function getExtensionVersion(): string {
+  try {
+    const version = chrome.runtime.getManifest?.().version;
+    if (typeof version === "string" && version.trim()) return version.trim();
+  } catch {
+    /* getManifest 在测试/异常环境可能不可用 */
+  }
+  return "0.0.0";
 }

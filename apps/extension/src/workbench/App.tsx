@@ -8,6 +8,7 @@ import { CorpusPage } from "./pages/CorpusPage";
 import { CreatorPage } from "./pages/CreatorPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SkillLibraryPage } from "./pages/SkillLibraryPage";
+import { runtimeApi, type UpdateCheckInfo } from "./runtimeApi";
 import "./components/components.css";
 
 type Route =
@@ -29,6 +30,7 @@ function AppInner() {
   const { setLanguage, t } = useTranslation();
   const [route, setRoute] = useState<Route>({ page: "settings" });
   const [toast, setToast] = useState<string | null>(null);
+  const [startupUpdateInfo, setStartupUpdateInfo] = useState<UpdateCheckInfo | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
   const data = useRuntimeData();
@@ -50,6 +52,22 @@ function AppInner() {
     if (toastTimerRef.current !== null) {
       window.clearTimeout(toastTimerRef.current);
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void runtimeApi.checkUpdate()
+      .then((result) => {
+        if (!cancelled && result.ok && result.hasUpdate) {
+          setStartupUpdateInfo(result);
+        }
+      })
+      .catch(() => {
+        /* Silent startup check: manual check in Settings can surface errors. */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const showToast = useCallback((msg: string) => {
@@ -102,6 +120,7 @@ function AppInner() {
             onModelsChanged={data.refreshModels}
             health={data.health}
             showToast={showToast}
+            initialUpdateInfo={startupUpdateInfo}
           />
         )}
 

@@ -87,6 +87,68 @@
   flex-basis: auto;
 }
 
+.settings-version {
+  font-family: "Noto Serif SC", monospace;
+  font-size: 14px;
+  color: var(--ink-focus);
+}
+
+.settings-update-status {
+  display: flex;
+  flex-basis: 100%;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-update-status__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.settings-update-status__line--ok {
+  color: var(--mountain-green);
+}
+
+.settings-update-status__line--available {
+  color: var(--seal-red);
+  font-weight: 600;
+}
+
+.settings-update-status__line--error {
+  color: var(--seal-red);
+}
+
+.settings-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-update-link {
+  text-decoration: none;
+}
+
+.settings-release-notes {
+  max-width: 720px;
+  font-size: 13px;
+  color: var(--ink-dense);
+}
+
+.settings-release-notes summary {
+  cursor: pointer;
+  color: var(--ink-focus);
+}
+
+.settings-release-notes p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
 .settings-switch {
   width: 44px;
   height: 24px;

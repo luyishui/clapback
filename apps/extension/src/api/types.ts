@@ -71,6 +71,20 @@ export type ExtensionHealthStatus = {
   version: string;
 };
 
+export type UpdateCheckResult =
+  | {
+      ok: true;
+      hasUpdate: boolean;
+      currentVersion: string;
+      latestVersion: string;
+      tagName: string;
+      releaseUrl: string;
+      releaseNotes?: string;
+      source: string;
+      mirrors: Array<{ id: string; labelKey: string; url: string }>;
+    }
+  | { ok: false; error: string };
+
 export type ExtensionRequestMap = {
   "settings:get": { payload: undefined; response: RuntimeSettings };
   "settings:save": { payload: Partial<Omit<RuntimeSettings, "api_key_set" | "base_url">>; response: RuntimeSettings };
@@ -127,6 +141,7 @@ export type ExtensionRequestMap = {
   "generation:generateCandidates": { payload: GenerateRequest; response: GenerateResponse };
   "generation:generate": { payload: GenerateRequest; response: GenerateResponse };
   "extension:health": { payload: undefined; response: ExtensionHealthStatus };
+  "extension:checkUpdate": { payload: undefined; response: UpdateCheckResult };
 };
 
 export type ExtensionMessageType = keyof ExtensionRequestMap;

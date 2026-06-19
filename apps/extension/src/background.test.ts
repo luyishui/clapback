@@ -10,6 +10,13 @@ const MODEL_API_URL_PATTERNS = [
   "https://api.moonshot.cn/*",
   "https://opencode.ai/*",
 ];
+const UPDATE_CHECK_URL_PATTERNS = [
+  "https://api.github.com/*",
+  "https://testingcf.jsdelivr.net/*",
+  "https://gcore.jsdelivr.net/*",
+  "https://gh-proxy.com/*",
+  "https://ghfast.top/*",
+];
 const OPTIONAL_MODEL_API_URL_PATTERNS = ["https://*/*"];
 
 describe("background content script recovery", () => {
@@ -36,6 +43,7 @@ describe("background content script recovery", () => {
       expect(manifest.host_permissions).toEqual([
         ...CONTENT_SCRIPT_URL_PATTERNS,
         ...MODEL_API_URL_PATTERNS,
+        ...UPDATE_CHECK_URL_PATTERNS,
       ]);
       expect(matches).toEqual(CONTENT_SCRIPT_URL_PATTERNS);
       expect(manifest.web_accessible_resources).toContainEqual({

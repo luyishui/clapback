@@ -27,7 +27,12 @@
     "https://api.anthropic.com/*",
     "https://api.deepseek.com/*",
     "https://api.moonshot.cn/*",
-    "https://opencode.ai/*"
+    "https://opencode.ai/*",
+    "https://api.github.com/*",
+    "https://testingcf.jsdelivr.net/*",
+    "https://gcore.jsdelivr.net/*",
+    "https://gh-proxy.com/*",
+    "https://ghfast.top/*"
   ],
   "optional_host_permissions": ["https://*/*"],
   "content_scripts": [
