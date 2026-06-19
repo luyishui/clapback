@@ -2,10 +2,22 @@
   "manifest_version": 3,
   "name": "Clapback / 嘴替",
   "short_name": "Clapback",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lock Zhihu/Weibo/Xiaohongshu comments and generate sharp reply candidates without auto-publishing.",
   "action": {
-    "default_title": "Clapback / 嘴替"
+    "default_title": "Clapback / 嘴替",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
   },
   "background": {
     "service_worker": "assets/background.js",

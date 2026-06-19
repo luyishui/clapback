@@ -15,6 +15,7 @@ import {
   deleteAmmoEntry,
   deleteCorpusBox,
   deleteModel,
+  deleteSkill,
   endCollectionSession,
   getCollectionSessionForTab,
   getCollectionSession,
@@ -132,6 +133,8 @@ export async function handleExtensionMessage<T extends ExtensionMessageType>(
         : false;
       return compileSkill(requireFiles(payload), skillId, requireSamples) as Promise<ExtensionRequestMap[T]["response"]>;
     }
+    case "skills:delete":
+      return deleteSkill(requireNonEmptyString(payload, "skillId")) as Promise<ExtensionRequestMap[T]["response"]>;
     case "skills:createDraft":
       return createSkillDraft(payload as Parameters<typeof createSkillDraft>[0]) as Promise<ExtensionRequestMap[T]["response"]>;
     case "skills:runTryout": {

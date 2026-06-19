@@ -5,12 +5,14 @@ import { SkillLibraryPage } from "./SkillLibraryPage";
 
 const mocks = vi.hoisted(() => ({
   compileSkill: vi.fn(),
+  deleteSkill: vi.fn(),
   getSkillDetail: vi.fn(),
 }));
 
 vi.mock("../runtimeApi", () => ({
   runtimeApi: {
     compileSkill: mocks.compileSkill,
+    deleteSkill: mocks.deleteSkill,
     getSkillDetail: mocks.getSkillDetail,
   },
 }));
@@ -21,6 +23,7 @@ describe("SkillLibraryPage detail compatibility", () => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     mocks.compileSkill.mockReset();
+    mocks.deleteSkill.mockReset();
     mocks.getSkillDetail.mockReset();
   });
 
@@ -147,6 +150,7 @@ describe("SkillLibraryPage detail compatibility", () => {
     await userEvent.click(screen.getByText("Full Fire"));
     expect(await screen.findByText("skills.export")).toBeTruthy();
     expect(screen.queryByText("skills.update")).toBeNull();
+    expect(screen.queryByText("skills.delete")).toBeNull();
   });
 
   it("updates non-built-in Skills from an uploaded package", async () => {
@@ -187,6 +191,44 @@ describe("SkillLibraryPage detail compatibility", () => {
     });
     expect(onSkillsChanged).toHaveBeenCalledTimes(1);
     expect(showToast).toHaveBeenCalledWith("toast.saved");
+  });
+
+  it("deletes non-built-in Skills after confirmation and returns to the list", async () => {
+    const detail = {
+      id: "user-skill",
+      name: "User Skill",
+      goal: "Delete this Skill.",
+      summary: "Deletable.",
+      compile_status: "compiled" as const,
+      skill_md: "# User Skill",
+      sample_outputs: [],
+      files: { "SKILL.md": "# User Skill" },
+      manifest: { imported: true },
+    };
+    mocks.getSkillDetail.mockResolvedValue(detail);
+    mocks.deleteSkill.mockResolvedValue(undefined);
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    const onSkillsChanged = vi.fn();
+    const showToast = vi.fn();
+
+    render(
+      <SkillLibraryPage
+        skills={[detail]}
+        onSkillsChanged={onSkillsChanged}
+        showToast={showToast}
+      />,
+    );
+
+    await userEvent.click(screen.getByText("User Skill"));
+    await userEvent.click(await screen.findByText("skills.delete"));
+
+    await waitFor(() => {
+      expect(mocks.deleteSkill).toHaveBeenCalledWith("user-skill");
+    });
+    expect(confirm).toHaveBeenCalledWith("skills.deleteConfirm");
+    expect(onSkillsChanged).toHaveBeenCalledTimes(1);
+    expect(showToast).toHaveBeenCalledWith("toast.deleted");
+    expect(screen.queryByText("SKILL.md Preview")).toBeNull();
   });
 });
 

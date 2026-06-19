@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="嘴替">
+  <rect width="128" height="128" rx="18" fill="#FFFFFF"/>
+  <text
+    x="64"
+    y="76"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    fill="#C41E3A"
+    font-family="Liu Jian Mao Cao, KaiTi, STKaiti, serif"
+    font-size="50"
+    font-weight="400"
+    letter-spacing="-4"
+  >嘴替</text>
+</svg>

@@ -21,7 +21,7 @@ import type {
 } from "./types";
 import { DEFAULT_AMMO_BOXES } from "./defaultAmmo";
 import type { LengthSettings } from "./lengthConstraints";
-import { fitToLengthConstraint, isWithinLengthConstraint, resolveLengthConstraint, trimToMaxChars } from "./lengthConstraints";
+import { fitToLengthConstraint, isWithinLengthConstraint, resolveLengthConstraint } from "./lengthConstraints";
 import { findExecutableSkillFiles } from "./skillPackages";
 import { generateSkillDraftFiles, runModelSkillTryout, skillGenerationToFiles } from "./skillGeneration";
 
@@ -725,6 +725,16 @@ export async function getSkillDetail(skillId: string): Promise<SkillDetail> {
   return normalizeSkillDetailForRead(detail);
 }
 
+export async function deleteSkill(skillId: string): Promise<void> {
+  const detail = await getRecord("skills", skillId);
+  if (!detail) throw new Error("skill_not_found");
+  const normalized = normalizeSkillDetailForRead(detail);
+  if (normalized.compile_status === "builtin" || normalized.manifest?.builtin === true || isBuiltinSkillReference(normalized.id, normalized.name)) {
+    throw new Error("skill_builtin_delete_blocked");
+  }
+  await deleteRecord("skills", skillId);
+}
+
 export function normalizeSkillDetailForRead(record: Partial<SkillRecord> & { id: string }): SkillDetail {
   const builtin = getBuiltinSkillDetails().find((detail) => detail.id === record.id);
   const source = builtin ? { ...record, ...builtin } : record;
@@ -985,12 +995,9 @@ async function createTryoutReply(
   const lengthConstraint = resolveLengthConstraint(lengthSettings);
   if (!model || !apiKey) throw new Error("skill_creator_model_required");
   try {
-    const reply = trimToMaxChars(
-      await runModelSkillTryout({ model, apiKey, draft, userUtterance, roundIndex, lengthConstraint }),
-      lengthConstraint.maxChars,
-    );
+    const reply = (await runModelSkillTryout({ model, apiKey, draft, userUtterance, roundIndex, lengthConstraint })).trim();
     if (isWithinLengthConstraint(reply, lengthConstraint)) return { reply };
-    throw new Error(reply ? "skill_creator_tryout_too_short" : "skill_creator_model_empty_content");
+    throw new Error(reply ? "skill_creator_tryout_length_out_of_range" : "skill_creator_model_empty_content");
   } catch (error) {
     throw new Error(skillCreatorModelErrorCode(error));
   }

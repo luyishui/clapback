@@ -54,6 +54,7 @@ Desktop.ini
 # Private planning/reference material not intended for GitHub
 references/
 docs/
+handoff/
 design/
 scripts/
 apps/runtime/

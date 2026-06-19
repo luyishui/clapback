@@ -80,8 +80,8 @@ export function buildActivationRepairPrompt(input: {
 export function buildExecutePrompt(input: ExecutePromptInput): string {
   return [
     "只输出一条中文评论正文，不解释，不编号，不要 JSON。",
-    "完整表达优先，明显超出硬上限才需要压缩。",
-    "字数控制: 达到长度下限后贴近目标值即可，不要贴着最多值写。",
+    "完整表达优先，围绕目标字数自然收束。",
+    "字数控制: 贴近目标值即可；标点、空格、引号不计入字数；不要为了凑字解释写作过程。",
     "",
     `平台: ${input.platform}`,
     `目标评论: ${input.targetText}`,
@@ -98,7 +98,7 @@ export function buildExecutePrompt(input: ExecutePromptInput): string {
     `共享约束: ${input.plan.sharedConstraints.join("；")}`,
     input.plan.forbiddenPatterns.length ? `禁忌: ${input.plan.forbiddenPatterns.join("；")}` : "",
     `长度策略: ${input.plan.lengthStrategy || input.lengthLabel}`,
-    `硬性长度: ${input.lengthLabel}；少于下限会被丢弃，明显超过硬上限才压缩，禁止硬截断半句。`,
+    `长度目标: ${input.lengthLabel}；系统内部会按完整评论验收，禁止硬截断半句。`,
     "",
     "当前角度:",
     `id: ${input.angle.id}`,
@@ -131,8 +131,8 @@ export function buildRefinePrompt(input: {
     `当前角度: ${input.angle.focus}；${input.angle.howToApply}`,
     `长度要求: ${input.lengthLabel}`,
     input.mode === "expand"
-      ? "扩写要求: 必须补足到长度下限以上；增加一个具体因果点或反问，达到下限后就停，不要超过长度要求里的最多值。"
-      : "压缩要求: 保留完整句子和核心攻击点，不要压成短梗；必须明显短于原候选，不要超过长度要求里的最多值。",
+      ? "扩写要求: 向目标字数靠拢；增加一个具体因果点或反问，补到完整评论后就停。"
+      : "压缩要求: 向目标字数靠拢；保留完整句子和核心攻击点，不要压成短梗。",
     `原候选: ${input.candidate}`,
   ].join("\n");
 }

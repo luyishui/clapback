@@ -1,7 +1,7 @@
 {
   "name": "@clapback/extension",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Clapback / 嘴替 browser extension MVP.",
   "type": "module",
   "scripts": {

@@ -42,7 +42,7 @@ const plan: SkillActivationPlan = {
     { id: "a2", focus: "责任转移", howToApply: "指出对方替关系里的伤害卸责。", styleNote: "冷静推进后收刀" },
     { id: "a3", focus: "因果链条", howToApply: "说清操控、索取到崩溃的顺序。", styleNote: "短句推进" },
   ],
-  lengthStrategy: "目标 100 个汉字，完整表达优先，最多 125 个汉字",
+  lengthStrategy: "目标 100 个汉字，完整表达优先，标点不计入字数",
 };
 
 describe("comment agent pipeline parsing and prompts", () => {
@@ -92,7 +92,7 @@ describe("comment agent pipeline parsing and prompts", () => {
       platform: "zhihu",
       targetText: "把复杂关系伤害说成吃饭睡觉就好。",
       intent: "反驳这种简化",
-      lengthLabel: "目标 100 个汉字，完整表达优先，最多 125 个汉字",
+      lengthLabel: "目标 100 个汉字，完整表达优先，标点不计入字数",
       pageTitle: "知乎问题",
       sourceText: "问题回答摘录",
       nearbyComments: [],
@@ -123,7 +123,7 @@ describe("comment agent pipeline parsing and prompts", () => {
       nearbyComments: [],
       plan,
       angle: plan.angles[0],
-      lengthLabel: "目标 100 个汉字，完整表达优先，最多 125 个汉字",
+      lengthLabel: "目标 100 个汉字，完整表达优先，标点不计入字数",
       selectedSampleText: "Selected Sample:\nOutput: 范例",
       existingCandidates: [],
     });
@@ -131,7 +131,7 @@ describe("comment agent pipeline parsing and prompts", () => {
     expect(prompt).toContain("只输出一条中文评论正文");
     expect(prompt).toContain("偷换概念");
     expect(prompt).toContain("完整表达优先");
-    expect(prompt).toContain("不要贴着最多值写");
+    expect(prompt).toContain("标点、空格、引号不计入字数");
     expect(prompt).not.toContain("完整 Skill Markdown");
     expect(prompt).not.toContain("SKILL.md");
   });
@@ -247,7 +247,7 @@ describe("comment agent pipeline orchestration", () => {
 
     expect(result).toHaveLength(3);
     expect(requestModelCompletion.mock.calls[1][2].user).toContain("目标 100 个汉字");
-    expect(requestModelCompletion.mock.calls[1][2].user).toContain("最多 125 个汉字");
+    expect(requestModelCompletion.mock.calls[1][2].user).toContain("标点不计入字数");
   });
 
   it("throws plan_invalid when activation and repair cannot produce a confirmed plan", async () => {
@@ -335,10 +335,10 @@ describe("comment agent pipeline orchestration", () => {
     expect(requestModelCompletion).toHaveBeenCalledTimes(4);
   });
 
-  it("refines candidates that are clearly outside the hard range", async () => {
+  it("refines candidates that are clearly outside the dynamic acceptance range", async () => {
     const requestModelCompletion = vi.fn()
       .mockResolvedValueOnce(completion(planJson()))
-      .mockResolvedValueOnce(completion("甲".repeat(150)))
+      .mockResolvedValueOnce(completion("甲".repeat(180)))
       .mockResolvedValueOnce(completion("乙".repeat(100)))
       .mockResolvedValueOnce(completion("丙".repeat(100)))
       .mockResolvedValueOnce(completion("丁".repeat(110)));
@@ -355,7 +355,7 @@ describe("comment agent pipeline orchestration", () => {
 
     expect(result).toEqual(["丁".repeat(110), "乙".repeat(100), "丙".repeat(100)]);
     expect(requestModelCompletion.mock.calls[4][2].user).toContain("压缩");
-    expect(requestModelCompletion.mock.calls[4][2].user).toContain("不要超过长度要求里的最多值");
+    expect(requestModelCompletion.mock.calls[4][2].user).toContain("向目标字数靠拢");
   });
 
   it("expands candidates below the minimum range", async () => {
@@ -391,12 +391,12 @@ describe("comment agent pipeline orchestration", () => {
     const requestModelCompletion = vi.fn()
       .mockResolvedValueOnce(completion(planJson(planWithMoreAngles)))
       .mockResolvedValueOnce(completion("甲".repeat(100)))
-      .mockResolvedValueOnce(completion("乙".repeat(150)))
-      .mockResolvedValueOnce(completion("丙".repeat(150)))
-      .mockResolvedValueOnce(completion("乙".repeat(130)))
-      .mockResolvedValueOnce(completion("丙".repeat(130)))
-      .mockResolvedValueOnce(completion("丁".repeat(150)))
-      .mockResolvedValueOnce(completion("丁".repeat(130)))
+      .mockResolvedValueOnce(completion("乙".repeat(180)))
+      .mockResolvedValueOnce(completion("丙".repeat(180)))
+      .mockResolvedValueOnce(completion("乙".repeat(170)))
+      .mockResolvedValueOnce(completion("丙".repeat(170)))
+      .mockResolvedValueOnce(completion("丁".repeat(180)))
+      .mockResolvedValueOnce(completion("丁".repeat(170)))
       .mockResolvedValueOnce(completion("戊".repeat(100)))
       .mockResolvedValueOnce(completion("己".repeat(100)));
 
@@ -447,7 +447,7 @@ describe("comment agent pipeline orchestration", () => {
   it("treats refine request failures as branch failures and fills once", async () => {
     const requestModelCompletion = vi.fn()
       .mockResolvedValueOnce(completion(planJson()))
-      .mockResolvedValueOnce(completion("甲".repeat(150)))
+      .mockResolvedValueOnce(completion("甲".repeat(180)))
       .mockResolvedValueOnce(completion("乙".repeat(100)))
       .mockResolvedValueOnce(completion("丙".repeat(100)))
       .mockRejectedValueOnce(new Error("temporary refine failure"))

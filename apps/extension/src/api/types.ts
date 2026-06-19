@@ -118,6 +118,7 @@ export type ExtensionRequestMap = {
   "skills:list": { payload: undefined; response: SkillInfo[] };
   "skills:getDetail": { payload: { skillId: string }; response: SkillDetail };
   "skills:compile": { payload: { files: Record<string, string>; skillId?: string; require_samples?: boolean }; response: { ok: boolean; skill?: SkillInfo; errors?: string[] } };
+  "skills:delete": { payload: { skillId: string }; response: void };
   "skills:createDraft": {
     payload: { source_box_ids: number[]; skill_name: string; skill_goal: string };
     response: SkillDraft;

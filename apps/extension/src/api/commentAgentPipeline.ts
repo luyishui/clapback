@@ -1,7 +1,7 @@
 import type { GenerateRequest } from "../content/types";
 import type { ModelConfig } from "../workbench/runtimeApi";
 import type { LengthConstraint } from "./lengthConstraints";
-import { isWithinLengthConstraint } from "./lengthConstraints";
+import { countEffectiveChars, isWithinLengthConstraint } from "./lengthConstraints";
 import type { ModelCompletion } from "./modelConnection";
 import { requestModelCompletion as defaultRequestModelCompletion } from "./modelConnection";
 import {
@@ -516,7 +516,7 @@ function normalizeForCompare(value: string): string {
 }
 
 function countChars(value: string): number {
-  return [...value].length;
+  return countEffectiveChars(value);
 }
 
 function redactModelError(error: unknown): string {

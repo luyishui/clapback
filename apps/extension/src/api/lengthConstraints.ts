@@ -32,17 +32,9 @@ export const LENGTH_OPTIONS: string[] = [
 export function resolveLengthConstraint(settings: LengthSettings): LengthConstraint {
   if (settings.lengthMode === CUSTOM_LENGTH_MODE) {
     const target = sanitizeCustomLengthTarget(settings.customLengthTarget) ?? CUSTOM_LENGTH_DEFAULT_TARGET;
-    if (target <= 10) {
-      return {
-        label: `目标 ${target} 个汉字，最多 ${target} 个汉字`,
-        maxChars: target,
-        targetChars: target,
-      };
-    }
-    const minChars = Math.max(1, target - 6);
-    const maxChars = Math.min(CUSTOM_LENGTH_MAX_CHARS, Math.max(target + 10, Math.ceil(target * 1.25)));
+    const { minChars, maxChars } = customLengthBounds(target);
     return {
-      label: `目标 ${target} 个汉字，完整表达优先，建议不少于 ${minChars} 个汉字，最多 ${maxChars} 个汉字`,
+      label: `目标 ${target} 个汉字，完整表达优先，标点不计入字数`,
       maxChars,
       minChars,
       targetChars: target,
@@ -56,14 +48,31 @@ export function sanitizeCustomLengthTarget(value: unknown): number | undefined {
   return clampInteger(value, 1, CUSTOM_LENGTH_MAX_CHARS);
 }
 
+export function countEffectiveChars(value: string): number {
+  return [...value].filter(isEffectiveChar).length;
+}
+
 export function trimToMaxChars(value: string, maxChars: number): string {
   const chars = [...value.trim()];
-  if (chars.length <= maxChars) return chars.join("");
-  return chars.slice(0, Math.max(0, maxChars)).join("").replace(/[，。！？、,.!?；;：:]+$/g, "").trim();
+  if (countEffectiveChars(value) <= maxChars) return chars.join("");
+
+  let used = 0;
+  let result = "";
+  for (const char of chars) {
+    if (isEffectiveChar(char)) {
+      if (used >= maxChars) break;
+      used += 1;
+      result += char;
+      if (used >= maxChars) break;
+      continue;
+    }
+    result += char;
+  }
+  return result.replace(/[，。！？、,.!?；;：:]+$/g, "").trim();
 }
 
 export function isWithinLengthConstraint(value: string, constraint: LengthConstraint): boolean {
-  const length = [...value.trim()].length;
+  const length = countEffectiveChars(value.trim());
   if (length === 0 || length > constraint.maxChars) return false;
   return constraint.minChars === undefined || length >= constraint.minChars;
 }
@@ -74,14 +83,14 @@ export function fitToLengthConstraint(
   paddingSegments: string[] = DEFAULT_LENGTH_PADDING_SEGMENTS,
 ): string {
   let result = trimToMaxChars(value, constraint.maxChars);
-  if (constraint.minChars === undefined || [...result].length >= constraint.minChars) return result;
+  if (constraint.minChars === undefined || countEffectiveChars(result) >= constraint.minChars) return result;
 
   for (const segment of paddingSegments) {
     result = appendWithinMax(result, segment, constraint.maxChars);
-    if ([...result].length >= constraint.minChars) return result;
+    if (countEffectiveChars(result) >= constraint.minChars) return result;
   }
 
-  while ([...result].length < constraint.minChars) {
+  while (countEffectiveChars(result) < constraint.minChars) {
     const next = appendWithinMax(result, "再把证据和前提补齐", constraint.maxChars);
     if (next === result) break;
     result = next;
@@ -101,12 +110,46 @@ function appendWithinMax(base: string, segment: string, maxChars: number): strin
   const cleanSegment = segment.trim();
   if (!cleanSegment) return cleanBase;
   const separator = cleanBase && !/[，。！？、,.!?；;：:]$/.test(cleanBase) ? "，" : "";
-  const remaining = maxChars - [...cleanBase].length;
+  const remaining = maxChars - countEffectiveChars(cleanBase);
   if (remaining <= 0) return cleanBase;
-  const segmentBudget = remaining - [...separator].length;
-  if (segmentBudget <= 0) return cleanBase;
-  const fittingSegment = [...cleanSegment].slice(0, segmentBudget).join("");
+  const fittingSegment = trimToMaxChars(cleanSegment, remaining);
+  if (!fittingSegment) return cleanBase;
   return `${cleanBase}${separator}${fittingSegment}`;
+}
+
+function customLengthBounds(target: number): { minChars: number; maxChars: number } {
+  if (target <= 10) {
+    return {
+      minChars: Math.max(1, Math.floor(target * 0.5)),
+      maxChars: Math.min(CUSTOM_LENGTH_MAX_CHARS, Math.ceil(target * 2)),
+    };
+  }
+  if (target <= 30) {
+    return {
+      minChars: Math.max(1, Math.floor(target * 0.5)),
+      maxChars: Math.min(CUSTOM_LENGTH_MAX_CHARS, Math.ceil(target * 1.75)),
+    };
+  }
+  if (target <= 80) {
+    return {
+      minChars: Math.max(1, Math.floor(target * 0.6)),
+      maxChars: Math.min(CUSTOM_LENGTH_MAX_CHARS, Math.ceil(target * 1.6)),
+    };
+  }
+  if (target <= 120) {
+    return {
+      minChars: Math.max(1, Math.floor(target * 0.75)),
+      maxChars: Math.min(CUSTOM_LENGTH_MAX_CHARS, Math.ceil(target * 1.5)),
+    };
+  }
+  return {
+    minChars: Math.max(1, Math.floor(target * 0.75)),
+    maxChars: Math.min(CUSTOM_LENGTH_MAX_CHARS, Math.ceil(target * 1.35)),
+  };
+}
+
+function isEffectiveChar(char: string): boolean {
+  return /[\p{L}\p{N}]/u.test(char);
 }
 
 function clampInteger(value: unknown, min: number, max: number): number | undefined {

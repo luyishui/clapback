@@ -1,3 +1,5 @@
+import { countEffectiveChars } from "./lengthConstraints";
+
 export type SampleLengthBucket = "短" | "中" | "长";
 
 export type RawSkillSample = {
@@ -183,7 +185,7 @@ function stringValue(value: unknown): string {
 }
 
 function countChars(value: string): number {
-  return [...value].length;
+  return countEffectiveChars(value);
 }
 
 function hashSample(value: string): string {

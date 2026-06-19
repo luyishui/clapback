@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, Upload } from "lucide-react";
+import { ArrowLeft, Download, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { PaperCard } from "../components/PaperCard";
@@ -169,6 +169,19 @@ function SkillDetailView({
     e.target.value = "";
   };
 
+  const handleDelete = async () => {
+    if (!detail || isBuiltin) return;
+    if (!confirm(t("skills.deleteConfirm").replace("{name}", detail.name))) return;
+    try {
+      await runtimeApi.deleteSkill(detail.id);
+      onSkillsChanged();
+      showToast(t("toast.deleted"));
+      onBack();
+    } catch {
+      showToast(t("toast.deleteFailed"));
+    }
+  };
+
   return (
     <>
       <button className="btn-ghost btn-sm skill-back" type="button" onClick={onBack}>
@@ -195,6 +208,9 @@ function SkillDetailView({
                   />
                   <button className="btn-primary btn-sm" type="button" onClick={() => updateFileRef.current?.click()}>
                     {t("skills.update")}
+                  </button>
+                  <button className="btn-ghost btn-sm btn-danger-text" type="button" onClick={handleDelete}>
+                    <Trash2 size={14} aria-hidden="true" /> {t("skills.delete")}
                   </button>
                 </>
               )}

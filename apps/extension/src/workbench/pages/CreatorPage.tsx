@@ -1,4 +1,4 @@
-import { Send, Sparkles, ThumbsUp, ThumbsDown, PenLine } from "lucide-react";
+import { ChevronUp, Send, Sparkles, ThumbsUp, ThumbsDown, PenLine } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   CUSTOM_LENGTH_DEFAULT_TARGET,
@@ -23,6 +23,18 @@ type Props = {
 
 const FEEDBACK_TAGS = ["不够像", "不够狠", "太油", "逻辑弱", "太长", "太短", "梗太多", "梗太少"];
 const REJECTION_REASONS = ["不够像", "不够狠", "太油", "逻辑弱", "太长", "太短"];
+const TRYOUT_PRESET_SENTENCES = [
+  "加班到凌晨是年轻人该吃的苦，嫌累就是不够上进。",
+  "公司拖欠工资可以理解，员工先体谅企业活下去。",
+  "买到问题商品还维权，纯粹是小题大做，商家也不容易。",
+  "被网暴的人别太敏感，既然发到网上就要承受所有评价。",
+  "公共场合大声外放没什么，嫌吵的人自己戴耳机。",
+  "孩子被同学排挤，多半是自己性格有问题，别怪别人。",
+  "房东临时涨租也正常，租客不接受可以自己搬走。",
+  "平台压低骑手配送时间是效率提升，送不到就是骑手能力差。",
+  "论文造假只要结果有用就行，纠结过程是书呆子思维。",
+  "客服态度差很正常，谁让顾客问题那么多。",
+];
 const CREATION_STAGE_KEYS = [
   "creator.stageValidateMaterial",
   "creator.stageReadMaterial",
@@ -81,6 +93,9 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
   const [annotationDialogMessageId, setAnnotationDialogMessageId] = useState("");
   const [annotationDialogTryoutId, setAnnotationDialogTryoutId] = useState(0);
   const [annotationDialogValue, setAnnotationDialogValue] = useState("");
+  const [presetOpen, setPresetOpen] = useState(false);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+  const presetBoxRef = useRef<HTMLDivElement>(null);
   const sendingTryoutRef = useRef(false);
 
   useEffect(() => {
@@ -99,10 +114,26 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
     return () => { active = false; };
   }, [selectedBoxes]);
 
+  useEffect(() => {
+    if (!presetOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!presetBoxRef.current?.contains(event.target as Node)) {
+        setPresetOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [presetOpen]);
+
   const pendingTryout = chatMessages.some((msg) => msg.role === "assistant" && msg.pending);
   const completedRounds = chatMessages.filter((msg) => msg.role === "assistant" && !msg.pending && !msg.failed).length;
   const maxRounds = Math.max(3, Math.min(10, Math.round(tryoutRounds || 3)));
   const feedbackReady = Boolean(draft && completedRounds >= maxRounds);
+  const tryoutInputDisabled = !draft || feedbackReady || pendingTryout;
+
+  useEffect(() => {
+    if (tryoutInputDisabled) setPresetOpen(false);
+  }, [tryoutInputDisabled]);
 
   const handleSend = async () => {
     const text = chatInput.trim();
@@ -140,6 +171,13 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
     } finally {
       sendingTryoutRef.current = false;
     }
+  };
+
+  const selectTryoutPreset = (sentence: string) => {
+    if (tryoutInputDisabled) return;
+    setChatInput(sentence);
+    setPresetOpen(false);
+    chatInputRef.current?.focus();
   };
 
   const toggleBox = (id: number) => {
@@ -437,14 +475,56 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
                 disabled={!draft || feedbackReady}
               />
             </label>
-            <input
-              className="chat-input"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              placeholder={draft ? t("creator.tryoutPlaceholder") : t("creator.chatPlaceholder")}
-              disabled={!draft || feedbackReady || pendingTryout}
-            />
+            <div className="tryout-input-combobox" ref={presetBoxRef}>
+              {presetOpen && (
+                <div
+                  id="creator-tryout-presets"
+                  className="tryout-preset-list"
+                  role="listbox"
+                  aria-label={t("creator.tryoutPresetList")}
+                >
+                  {TRYOUT_PRESET_SENTENCES.map((sentence) => (
+                    <button
+                      key={sentence}
+                      type="button"
+                      className="tryout-preset-option"
+                      role="option"
+                      onClick={() => selectTryoutPreset(sentence)}
+                    >
+                      {sentence}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={chatInputRef}
+                className="chat-input"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setPresetOpen(false);
+                    return;
+                  }
+                  if (e.key === "Enter") handleSend();
+                }}
+                placeholder={draft ? t("creator.tryoutPlaceholder") : t("creator.chatPlaceholder")}
+                disabled={tryoutInputDisabled}
+                aria-controls={presetOpen ? "creator-tryout-presets" : undefined}
+                aria-expanded={presetOpen}
+                aria-haspopup="listbox"
+              />
+              <button
+                className="tryout-preset-toggle"
+                type="button"
+                aria-label={t("creator.tryoutPresetToggle")}
+                aria-expanded={presetOpen}
+                onClick={() => setPresetOpen((open) => !open)}
+                disabled={tryoutInputDisabled}
+              >
+                <ChevronUp size={16} aria-hidden="true" />
+              </button>
+            </div>
             <button className="btn-primary btn-sm" type="button" onClick={handleSend} aria-label={t("creator.sendTryout")} disabled={!draft || feedbackReady || pendingTryout}>
               <Send size={14} aria-hidden="true" />
               <span className="creator-send-label">{t("creator.sendTryout")}</span>
@@ -615,7 +695,7 @@ function skillCreatorErrorMessage(error: unknown, t: (key: string) => string, fa
   if (raw.includes("skill_creator_model_request_failed_401") || raw.includes("skill_creator_model_request_failed_403")) return t("creator.errorModelUnauthorized");
   if (raw.includes("skill_creator_model_request_failed_429")) return t("creator.errorModelRateLimited");
   if (raw.includes("skill_creator_model_request_failed")) return t("creator.errorModelRequestFailed");
-  if (raw.includes("skill_creator_tryout_too_short")) return t("creator.errorTryoutTooShort");
+  if (raw.includes("skill_creator_tryout_too_short") || raw.includes("skill_creator_tryout_length_out_of_range")) return t("creator.errorTryoutLengthOutOfRange");
   if (raw.includes("skill_creator_material_insufficient")) return t("creator.errorMaterialInsufficient");
   if (raw.includes("skill_creator_invalid_output")) return t("creator.errorInvalidOutput");
   if (raw.includes("skill_creator_feedback_limit_reached")) return t("creator.errorFeedbackLimit");

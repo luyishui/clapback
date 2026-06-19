@@ -856,7 +856,7 @@ describe("Workbench App", () => {
     expect(screen.queryByText(/已降级/)).toBeNull();
   });
 
-  it("shows a recoverable tryout error when the model reply is below the target length", async () => {
+  it("shows a recoverable tryout error when the model reply is outside the target length range", async () => {
     await seedCreatorModel();
     render(<App />);
 
@@ -875,7 +875,7 @@ describe("Workbench App", () => {
     await userEvent.type(screen.getByPlaceholderText("输入任意言论..."), "这个观点没问题");
     await userEvent.click(screen.getByRole("button", { name: "发送试打" }));
 
-    expect((await screen.findAllByText("模型回复低于目标字数，请调整目标或重试")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("模型回复不在目标长度范围内，请调整目标或重试")).length).toBeGreaterThan(0);
     expect(screen.queryByText(/已降级/)).toBeNull();
   });
 
@@ -939,6 +939,34 @@ describe("Workbench App", () => {
           lengthMode: "自定义",
           customLengthTarget: 18,
         }),
+      }));
+    });
+  });
+
+  it("fills the tryout input from a scrollable preset picker without sending immediately", async () => {
+    await seedCreatorModel();
+    render(<App />);
+
+    await createDraftFromCreator();
+    const before = messages.filter((message) => message.type === "skills:runTryout").length;
+
+    await userEvent.click(screen.getByRole("button", { name: "打开预设试打句子" }));
+    const listbox = await screen.findByRole("listbox", { name: "预设试打句子" });
+    expect(listbox.className).toContain("tryout-preset-list");
+    expect(screen.getAllByRole("option")).toHaveLength(10);
+
+    const preset = "加班到凌晨是年轻人该吃的苦，嫌累就是不够上进。";
+    await userEvent.click(screen.getByRole("option", { name: preset }));
+
+    expect((screen.getByPlaceholderText("输入任意言论...") as HTMLInputElement).value).toBe(preset);
+    expect(messages.filter((message) => message.type === "skills:runTryout")).toHaveLength(before);
+
+    await userEvent.click(screen.getByRole("button", { name: "发送试打" }));
+
+    await waitFor(() => {
+      expect(messages).toContainEqual(expect.objectContaining({
+        type: "skills:runTryout",
+        payload: expect.objectContaining({ user_utterance: preset }),
       }));
     });
   });

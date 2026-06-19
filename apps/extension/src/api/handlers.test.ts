@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleExtensionMessage } from "./handlers";
 import { normalizeSkillDetailForRead, resetExtensionDataForTests } from "./idbStore";
+import { countEffectiveChars } from "./lengthConstraints";
 
 describe("extension background API handlers", () => {
   beforeEach(() => {
@@ -137,6 +138,42 @@ describe("extension background API handlers", () => {
     expect(Object.values(creatorPlaybook.taxonomy)).toEqual(
       expect.arrayContaining([expect.any(Number)]),
     );
+  });
+
+  it("deletes imported Skills but blocks built-in Skill deletion", async () => {
+    const compiled = await handleExtensionMessage({
+      type: "skills:compile",
+      payload: { files: completeSkillPackage("Delete Me", "临时导入的技将。") },
+    });
+    expect(compiled.ok).toBe(true);
+    expect((await handleExtensionMessage({ type: "skills:list" })).some((skill) => skill.id === "delete-me")).toBe(true);
+
+    await handleExtensionMessage({
+      type: "skills:delete",
+      payload: { skillId: "delete-me" },
+    });
+
+    expect((await handleExtensionMessage({ type: "skills:list" })).some((skill) => skill.id === "delete-me")).toBe(false);
+    await expect(handleExtensionMessage({
+      type: "skills:getDetail",
+      payload: { skillId: "delete-me" },
+    })).rejects.toThrow("skill_not_found");
+
+    await expect(handleExtensionMessage({
+      type: "skills:delete",
+      payload: { skillId: "full_fire" },
+    })).rejects.toThrow("skill_builtin_delete_blocked");
+    expect((await handleExtensionMessage({ type: "skills:list" })).some((skill) => skill.id === "full_fire")).toBe(true);
+  });
+
+  it("does not allow content scripts to delete Skills", async () => {
+    await expect(handleExtensionMessage({
+      type: "skills:delete",
+      payload: { skillId: "draft-skill" },
+    }, {
+      tab: { id: 1, url: "https://www.zhihu.com/question/1" },
+      url: "https://www.zhihu.com/question/1",
+    } as chrome.runtime.MessageSender)).rejects.toThrow("message_not_allowed_from_content:skills:delete");
   });
 
   it("seeds default ammo boxes into extension storage for Workbench and content panels", async () => {
@@ -965,7 +1002,7 @@ describe("extension background API handlers", () => {
     const tryoutBody = JSON.parse(String(tryoutCalls[1][1].body));
     const prompt = tryoutBody.messages.map((message: { content: string }) => message.content).join("\n");
     expect(prompt).toContain("目标 16 个汉字");
-    expect(prompt).toContain("建议不少于 10 个汉字，最多 26 个汉字");
+    expect(prompt).toContain("标点不计入字数");
   });
 
   it("rebuilds Skill draft files through the model when feedback is applied", async () => {
@@ -1881,10 +1918,10 @@ describe("extension background API handlers", () => {
     const requestBody = JSON.parse(String(requestCalls[0][1].body));
     const prompt = requestBody.messages.map((message: { content: string }) => message.content).join("\n");
     expect(prompt).toContain("目标 16 个汉字");
-    expect(prompt).toContain("10 到 26 个汉字");
+    expect(prompt).toContain("标点、空格、引号不计入字数");
   });
 
-  it("states custom target length as a hard per-candidate rule for long daily generation", async () => {
+  it("states custom target length as a per-candidate target for long daily generation", async () => {
     await handleExtensionMessage({
       type: "models:save",
       payload: {
@@ -1916,11 +1953,12 @@ describe("extension background API handlers", () => {
     const requestCalls = fetchMock.mock.calls as unknown as Array<[string, { body: string }]>;
     const requestBody = JSON.parse(String(requestCalls[0][1].body));
     const prompt = requestBody.messages.map((message: { content: string }) => message.content).join("\n");
-    expect(prompt).toContain("硬性字数");
+    expect(prompt).toContain("目标字数");
     expect(prompt).toContain("输出 3 条候选");
     expect(prompt).not.toContain("输出 4 条候选");
     expect(prompt).toContain("每条候选");
-    expect(prompt).toContain("94 到 125 个汉字");
+    expect(prompt).toContain("以 100 个汉字为目标");
+    expect(prompt).toContain("标点、空格、引号不计入字数");
     expect(prompt).toContain("不是 3 条合计");
     expect(prompt).toContain("直接输出最终候选");
     expect(prompt).toContain("不要先写超长草稿");
@@ -1953,7 +1991,7 @@ describe("extension background API handlers", () => {
         { id: "a2", focus: "责任转移", howToApply: "指出这种说法替关系伤害卸责。", styleNote: "嘲讽收尾" },
         { id: "a3", focus: "因果链条", howToApply: "讲清控制、索取、崩溃之间的顺序。", styleNote: "短句推进" },
       ],
-      lengthStrategy: "目标 100 个汉字，完整表达优先，最多 125 个汉字",
+      lengthStrategy: "目标 100 个汉字，完整表达优先，标点不计入字数",
     };
     const executeOutputs = [
       "把复杂关系伤害说成吃饭睡觉，就是把长期控制、索取、否定和经济压榨全擦掉。身体疲惫可以靠休息缓过来，但反复被掏空、被羞辱、被迫承担后果，不会因为多睡一觉就自动消失。别拿作息给真实伤害洗地，也别装轻巧。",
@@ -1981,13 +2019,13 @@ describe("extension background API handlers", () => {
 
     expect(response.candidates).toHaveLength(3);
     expect(response.candidates).toEqual(executeOutputs);
-    expect(response.candidates.every((candidate) => [...candidate].length >= 94 && [...candidate].length <= 125)).toBe(true);
+    expect(response.candidates.every((candidate) => countEffectiveChars(candidate) >= 75 && countEffectiveChars(candidate) <= 150)).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(4);
     const bodies = (fetchMock.mock.calls as unknown as Array<[string, { body: string }]>)
       .map(([, init]) => JSON.parse(String(init.body)));
     expect(bodies.every((body) => body.model === "deepseek-v4-flash")).toBe(true);
     expect(bodies[0].max_tokens).toBe(2400);
-    expect(bodies.slice(1).every((body) => body.max_tokens === 1024)).toBe(true);
+    expect(bodies.slice(1).every((body) => body.max_tokens === 1536)).toBe(true);
     expect(bodies.every((body) => body.stream === true)).toBe(true);
     expect(bodies.every((body) => body.response_format === undefined)).toBe(true);
     expect(bodies.every((body) => body.thinking?.type === "disabled")).toBe(true);
@@ -2087,9 +2125,9 @@ describe("extension background API handlers", () => {
     const repairBody = JSON.parse(String((fetchMock.mock.calls[1][1] as { body: string }).body));
     const repairPrompt = repairBody.messages.map((message: { content: string }) => message.content).join("\n");
     expect(repairPrompt).toContain("目标 50 个汉字");
-    expect(repairPrompt).toContain("44 到 63 个汉字");
+    expect(repairPrompt).toContain("向目标 50 个汉字靠拢");
     expect(repairPrompt).toContain("候选长度");
-    expect(repairPrompt).toContain("要求范围=44-63");
+    expect(repairPrompt).toContain("要求范围=30-80");
     expect(repairPrompt).toContain("上次不合格候选");
     expect(repairPrompt).toContain("证据呢");
   });
@@ -2107,16 +2145,16 @@ describe("extension background API handlers", () => {
     });
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(openAiStreamText(candidateJson([
-        "甲".repeat(80),
-        "乙".repeat(81),
-        "丙".repeat(82),
-        "丁".repeat(83),
+        "甲".repeat(60),
+        "乙".repeat(61),
+        "丙".repeat(62),
+        "丁".repeat(63),
       ])))
       .mockResolvedValueOnce(openAiStreamText(candidateJson([
-        "戊".repeat(118),
-        "己".repeat(116),
-        "庚".repeat(115),
-        "辛".repeat(114),
+        "戊".repeat(92),
+        "己".repeat(90),
+        "庚".repeat(88),
+        "辛".repeat(86),
       ])));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -2131,11 +2169,11 @@ describe("extension background API handlers", () => {
       },
     });
 
-    expect(response.candidates.map((candidate) => [...candidate].length)).toEqual([118, 116, 115]);
+    expect(response.candidates.map((candidate) => countEffectiveChars(candidate))).toEqual([92, 90, 88]);
     const repairBody = JSON.parse(String((fetchMock.mock.calls[1][1] as { body: string }).body));
     const repairPrompt = repairBody.messages.map((message: { content: string }) => message.content).join("\n");
-    expect(repairPrompt).toContain("上次候选只有 80-83 字");
-    expect(repairPrompt).toContain("补到 94-125 个汉字");
+    expect(repairPrompt).toContain("上次候选只有 60-63 字");
+    expect(repairPrompt).toContain("接近目标 100 个汉字");
     expect(repairPrompt).toContain("补一个具体点或因果解释");
     expect(repairPrompt).not.toContain("每条至少再补 80 个汉字");
     expect(repairPrompt).not.toContain("按 160-180 字写");

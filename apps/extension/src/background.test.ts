@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { CONTENT_SCRIPT_URL_PATTERNS, injectContentScriptIntoOpenTabs, registerBackgroundHandlers } from "./background";
@@ -26,6 +26,8 @@ describe("background content script recovery", () => {
         permissions?: string[];
         host_permissions?: string[];
         options_ui?: { page?: string; open_in_tab?: boolean };
+        action?: { default_icon?: Record<string, string> };
+        icons?: Record<string, string>;
         content_scripts?: Array<{ matches?: string[]; js?: string[] }>;
         web_accessible_resources?: Array<{ resources?: string[]; matches?: string[] }>;
         [key: string]: unknown;
@@ -40,6 +42,13 @@ describe("background content script recovery", () => {
       expect(manifest.permissions).toContain("scripting");
       expect(manifest.permissions).not.toContain(legacyPagePermission);
       expect(manifest.options_ui).toEqual({ page: "index.html", open_in_tab: true });
+      expect(manifest.icons).toEqual({
+        "16": "icons/icon-16.png",
+        "32": "icons/icon-32.png",
+        "48": "icons/icon-48.png",
+        "128": "icons/icon-128.png",
+      });
+      expect(manifest.action?.default_icon).toEqual(manifest.icons);
       expect(manifest.host_permissions).toEqual([
         ...CONTENT_SCRIPT_URL_PATTERNS,
         ...MODEL_API_URL_PATTERNS,
@@ -57,6 +66,18 @@ describe("background content script recovery", () => {
       expect(manifest.web_accessible_resources?.some((entry) => entry.matches?.includes(allUrlsPattern))).toBe(false);
       expect(manifest.content_scripts?.[0]?.js).toEqual(["assets/content.js"]);
       expect(manifest[optionalHostKey]).toEqual(OPTIONAL_MODEL_API_URL_PATTERNS);
+    }
+  });
+
+  it("ships the 嘴替 brand icon assets referenced by the manifest", () => {
+    for (const relativePath of [
+      "public/icons/icon.svg",
+      "public/icons/icon-16.png",
+      "public/icons/icon-32.png",
+      "public/icons/icon-48.png",
+      "public/icons/icon-128.png",
+    ]) {
+      expect(existsSync(resolve(process.cwd(), relativePath))).toBe(true);
     }
   });
 

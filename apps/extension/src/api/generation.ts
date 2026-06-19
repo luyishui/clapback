@@ -2,7 +2,7 @@ import type { GenerateRequest, GenerateResponse } from "../content/types";
 import type { AmmoEntry, ModelConfig, SkillDetail } from "../workbench/runtimeApi";
 import { getDefaultModelConfig, getRawApiKey, getSettings, getSkillDetail, listAmmoEntries } from "./idbStore";
 import type { LengthConstraint } from "./lengthConstraints";
-import { isWithinLengthConstraint, resolveLengthConstraint } from "./lengthConstraints";
+import { countEffectiveChars, isWithinLengthConstraint, resolveLengthConstraint } from "./lengthConstraints";
 import type { ModelCompletion } from "./modelConnection";
 import { requestModelCompletion } from "./modelConnection";
 import { INTERNAL_STRATEGY_LABEL_OUTPUT_RULE } from "./internalStrategyLabels";
@@ -793,19 +793,19 @@ function compactWriteInstruction(request: GenerateRequest, lengthConstraint: Len
   const target = lengthConstraint.targetChars ?? lengthConstraint.maxChars;
   if (request.settings.activeSkillId === "wenyan_attack") {
     return [
-      `写法: 接近 ${target} 字；不要精确数数，宁可略完整；明显超过硬上限会被要求压缩，不会直接截断半句。`,
+      `写法: 目标 ${target} 字；不要精确数数，宁可完整收束；标点不计入字数。`,
       "结构: 判词开头，指出情感操控/金钱压榨/心理崩溃，再加一句白话解释说明目标说法为什么盖不过关系中的真实伤害。",
     ].join("\n");
   }
   return [
-    `写法: 三到四个分句，接近 ${target} 字；不要精确数数，宁可略完整；明显超过硬上限会被要求压缩，不会直接截断半句。`,
+    `写法: 三到四个分句，目标 ${target} 字；不要精确数数，宁可完整收束；标点不计入字数。`,
     "内容: 至少包含一个具体因果解释，不要短梗，不要复读目标评论。",
   ].join("\n");
 }
 
 function compactLengthRangeInstruction(lengthConstraint: LengthConstraint): string {
-  if (lengthConstraint.minChars !== undefined) {
-    return `硬性长度: 至少 ${lengthConstraint.minChars} 个汉字，不超过 ${lengthConstraint.maxChars} 个汉字；少于下限会被丢弃，明显超过硬上限会被要求压缩，不会直接截断半句。`;
+  if (lengthConstraint.targetChars !== undefined) {
+    return `长度目标: 目标 ${lengthConstraint.targetChars} 个汉字，完整表达优先；标点不计入字数；不要为了凑字数解释写作过程。`;
   }
   return `硬性长度: 不超过 ${lengthConstraint.maxChars} 个汉字；超过上限会被丢弃。`;
 }
@@ -814,8 +814,11 @@ function strictLengthInstruction(lengthConstraint: LengthConstraint, candidateCo
   const longTargetRule = lengthConstraint.targetChars !== undefined && lengthConstraint.targetChars >= 80
     ? `长目标写法: 直接输出最终候选，不要先写超长草稿；每条围绕目标文本的一到两个具体点展开，用 3 到 5 个分句说清漏洞、影响和收束结论；不要解释推理过程。`
     : "";
+  if (lengthConstraint.targetChars !== undefined) {
+    return `目标字数: 每条候选以 ${lengthConstraint.targetChars} 个汉字为目标；这是每条候选单独计数，不是 ${candidateCount} 条合计；标点、空格、引号不计入字数；短句不是短回复，必须写成完整评论。${longTargetRule}`;
+  }
   if (lengthConstraint.minChars !== undefined) {
-    return `硬性字数: 每条候选最终必须落在 ${lengthConstraint.minChars} 到 ${lengthConstraint.maxChars} 个汉字；这是每条候选单独计数，不是 ${candidateCount} 条合计；少于 ${lengthConstraint.minChars} 会被丢弃，明显超过硬上限会被要求压缩，不会直接截断半句。短句不是短回复；如果 Skill 要求短句，只能把一条候选拆成多句，不能少于下限。${longTargetRule}`;
+    return `硬性字数: 每条候选需要完整且接近长度要求；这是每条候选单独计数，不是 ${candidateCount} 条合计；短句不是短回复；如果 Skill 要求短句，只能把一条候选拆成多句。${longTargetRule}`;
   }
   return `硬性字数: 每条候选必须${lengthConstraint.label}；这是每条候选单独计数，不是 ${candidateCount} 条合计；超过上限会被丢弃。短句不是短回复；如果 Skill 要求短句，只能把一条候选拆成多句。${longTargetRule}`;
 }
@@ -886,8 +889,10 @@ function buildRepairPrompt(
     "上一次输出存在空内容、截断、格式不可解析、重复、超长、过短或数量不足。",
     renderRejectedCandidateBlock(rejectedCandidates, candidateCount),
     renderRepairExpansionInstruction(rejectedCandidates, lengthConstraint),
-    lengthConstraint.minChars !== undefined
-      ? `修复重点: 每条候选必须落在 ${lengthConstraint.minChars}-${lengthConstraint.maxChars} 个汉字；如果失败诊断显示候选长度低于下限，必须扩写，不要再输出短梗。`
+    lengthConstraint.targetChars !== undefined
+      ? `修复重点: 每条候选向目标 ${lengthConstraint.targetChars} 个汉字靠拢；如果失败诊断显示候选过短，必须扩写，不要再输出短梗；如果明显冗长，压缩到完整评论。`
+      : lengthConstraint.minChars !== undefined
+        ? `修复重点: 每条候选必须接近长度要求；如果失败诊断显示候选长度低于下限，必须扩写，不要再输出短梗。`
       : `修复重点: 每条候选不得超过 ${lengthConstraint.maxChars} 个汉字。`,
     acceptedCandidates.length > 0
       ? `只补足缺失候选，不要重复已合格候选；至少补 ${Math.max(1, RETURN_CANDIDATE_COUNT - acceptedCandidates.length)} 条，每条独立一行，必须${lengthConstraint.label}。`
@@ -931,7 +936,7 @@ function renderRepairExpansionInstruction(rejectedCandidates: string[], lengthCo
   if (shortest >= lengthConstraint.minChars) return "";
   const longest = Math.max(...lengths);
   const lengthRange = shortest === longest ? `${shortest}` : `${shortest}-${longest}`;
-  return `扩写硬令: 上次候选只有 ${lengthRange} 字，补到 ${lengthConstraint.minChars}-${lengthConstraint.maxChars} 个汉字；每条只补一个具体点或因果解释，再用一句收束，不要写超长草稿。`;
+  return `扩写硬令: 上次候选只有 ${lengthRange} 字，补到接近目标 ${lengthConstraint.targetChars} 个汉字；每条只补一个具体点或因果解释，再用一句收束，不要写超长草稿。`;
 }
 
 function buildGenerationSystemPrompt(candidateCount: number, extra = ""): string {
@@ -974,7 +979,7 @@ function trimChars(value: string, limit: number): string {
 }
 
 function countChars(value: string): number {
-  return [...value].length;
+  return countEffectiveChars(value);
 }
 
 function normalizeForCompare(value: string): string {

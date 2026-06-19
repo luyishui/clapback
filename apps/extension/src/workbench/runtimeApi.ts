@@ -218,6 +218,9 @@ export const runtimeApi = {
       skillId: "skillId" in payload && typeof payload.skillId === "string" ? payload.skillId : undefined,
     }),
 
+  deleteSkill: (skillId: string) =>
+    sendExtensionMessage("skills:delete", { skillId }),
+
   startCrawlJob: async (payload: {
     platform: string;
     mode: string;
