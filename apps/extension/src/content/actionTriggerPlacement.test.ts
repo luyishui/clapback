@@ -138,6 +138,11 @@ describe("comment action trigger placement", () => {
 
     attachZhihuClapback({ runtime: { generate } });
     document.querySelector<HTMLButtonElement>(".ContentItem-actions .clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {
@@ -157,7 +162,7 @@ describe("comment action trigger placement", () => {
     expect(generate.mock.calls[0][0].context.sourceText).not.toContain("收起评论");
   });
 
-  it("opens the Zhihu comment panel as the right-bottom floating panel", () => {
+  it("opens the Zhihu comment panel as the right-bottom floating panel", async () => {
     document.body.innerHTML = `
       <div class="CommentItem" data-za-detail-view-id="zhihu-1">
         <div class="CommentItem-content">知乎评论正文。</div>
@@ -170,6 +175,10 @@ describe("comment action trigger placement", () => {
 
     attachZhihuClapback({ runtime: { generate: vi.fn() } });
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
 
     const panel = document.querySelector<HTMLElement>(".clapback-panel")!;
     expect(panel.parentElement).toBe(document.body);
@@ -197,6 +206,11 @@ describe("comment action trigger placement", () => {
 
     attachZhihuClapback({ runtime: { generate } });
     document.querySelector<HTMLButtonElement>(".CommentItem-footer .clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {
@@ -311,7 +325,7 @@ describe("comment action trigger placement", () => {
     expect(firstActionRow?.lastElementChild?.textContent?.trim()).toBe("嘴替");
   });
 
-  it("opens the Weibo panel as the right-bottom floating panel", () => {
+  it("opens the Weibo panel as the right-bottom floating panel", async () => {
     document.body.innerHTML = `
       <article class="card-wrap" mid="weibo-1">
         <div class="WB_text">微博帖子正文。</div>
@@ -325,6 +339,10 @@ describe("comment action trigger placement", () => {
 
     attachWeiboClapback({ runtime: { generate: vi.fn() } });
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
 
     const panel = document.querySelector<HTMLElement>(".clapback-panel")!;
     const actionRow = document.querySelector<HTMLElement>(".card-act")!;
@@ -417,6 +435,11 @@ describe("comment action trigger placement", () => {
 
     attachWeiboClapback({ runtime: { generate } });
     document.querySelector<HTMLButtonElement>(".item1 .clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {
@@ -455,6 +478,11 @@ describe("comment action trigger placement", () => {
 
     attachWeiboClapback({ runtime: { generate } });
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {
@@ -589,6 +617,11 @@ describe("comment action trigger placement", () => {
     expect(session.targets[0].target.text).not.toContain("手机号登录");
 
     document.querySelector<HTMLButtonElement>(".buttons.engage-bar-style .clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     expect(document.querySelector<HTMLElement>(".clapback-panel")?.style.maxHeight).toBe("calc(100vh - 120px)");
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
@@ -659,10 +692,14 @@ describe("comment action trigger placement", () => {
 
     document.querySelector<HTMLButtonElement>(".clapback-trigger--global")?.click();
 
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-global-panel")).not.toBeNull();
+    });
+
     const panel = document.querySelector<HTMLElement>(".clapback-global-panel")!;
     await vi.waitFor(() => {
-      expect(panel.querySelector<HTMLSelectElement>(".clapback-skill-select")?.value).toBe("full_fire");
-      expect(panel.querySelector<HTMLInputElement>(".clapback-custom-length")?.value).toBe("20");
+      expect(panel.querySelector<HTMLSelectElement>(".clapback-skill-select")?.value).toBe("default_high_fire");
+      expect(panel.querySelector<HTMLInputElement>(".clapback-custom-length")?.value).toBe("50");
       expect(panel.querySelector<HTMLSelectElement>(".clapback-ammo-select")?.hidden).toBe(true);
       expect([...panel.querySelectorAll<HTMLInputElement>(".clapback-ammo-checkbox:checked")].map((item) => item.value)).toEqual(["7"]);
     });
@@ -703,6 +740,11 @@ describe("comment action trigger placement", () => {
 
     attachZhihuClapback({ runtime: { generate } });
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     const firstCandidate = await vi.waitFor(() => {

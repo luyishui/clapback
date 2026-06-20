@@ -68,13 +68,17 @@ describe("Zhihu DOM adapter", () => {
     });
   });
 
-  it("locks the clicked target and opens a lightweight paper panel with generation controls", () => {
+  it("locks the clicked target and opens a lightweight paper panel with generation controls", async () => {
     attachZhihuClapback({
       runtime: { generate: vi.fn() },
       settings: { activeSkillId: "默认高压嘴替", lengthMode: "短", ammoBoxIds: [] },
     });
 
     document.querySelectorAll<HTMLButtonElement>(".clapback-trigger")[0].click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
 
     const panel = document.querySelector<HTMLElement>(".clapback-panel");
     const input = document.querySelector<HTMLTextAreaElement>(".clapback-intent");
@@ -84,19 +88,23 @@ describe("Zhihu DOM adapter", () => {
     expect(panel?.textContent).toContain("这类 AI 回复工具只会让讨论更糟。");
     expect(panel?.querySelector<HTMLButtonElement>(".clapback-generate")?.textContent).toContain("生成");
     expect(panel?.querySelector<HTMLSelectElement>(".clapback-skill-select")?.value).toBe("默认高压嘴替");
-    expect(panel?.querySelector<HTMLInputElement>(".clapback-custom-length")?.value).toBe("20");
+    expect(panel?.querySelector<HTMLInputElement>(".clapback-custom-length")?.value).toBe("50");
     expect(panel?.querySelector<HTMLSelectElement>(".clapback-ammo-select")?.multiple).toBe(true);
     expect(panel?.textContent).not.toContain("阴阳怪气");
     expect(document.activeElement).toBe(input);
   });
 
-  it("shows panel settings controls without unrelated presets", () => {
+  it("shows panel settings controls without unrelated presets", async () => {
     attachZhihuClapback({
       runtime: { generate: vi.fn() },
       settings: { activeSkillId: "默认高压嘴替", lengthMode: "短", ammoBoxIds: [] },
     });
 
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
 
     const settingsPanel = document.querySelector<HTMLElement>(".clapback-panel__settings")!;
 
@@ -120,6 +128,11 @@ describe("Zhihu DOM adapter", () => {
     });
 
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLTextAreaElement>(".clapback-intent")!.value = "反驳工具原罪";
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
@@ -140,7 +153,7 @@ describe("Zhihu DOM adapter", () => {
         nearbyComments: ["如果能保持不自动发布，我倒觉得可以试试。"],
       }),
       intent: "反驳工具原罪",
-      settings: expect.objectContaining({ activeSkillId: "My Voice", lengthMode: "自定义", customLengthTarget: 20, ammoBoxIds: [] }),
+      settings: expect.objectContaining({ activeSkillId: "My Voice", lengthMode: "自定义", customLengthTarget: 50, ammoBoxIds: [] }),
     });
   });
 
@@ -155,6 +168,11 @@ describe("Zhihu DOM adapter", () => {
     });
 
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     const skillSelect = document.querySelector<HTMLSelectElement>(".clapback-skill-select")!;
     skillSelect.append(new Option("火力全开", "full_fire"));
     skillSelect.value = "full_fire";
@@ -189,6 +207,11 @@ describe("Zhihu DOM adapter", () => {
     });
 
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     const customLength = document.querySelector<HTMLInputElement>(".clapback-custom-length")!;
     customLength.value = "26";
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
@@ -237,6 +260,11 @@ describe("Zhihu DOM adapter", () => {
 
     attachZhihuClapback({ runtime: { generate } });
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {
@@ -275,6 +303,11 @@ describe("Zhihu DOM adapter", () => {
 
     attachZhihuClapback({ runtime: { generate } });
     document.querySelector<HTMLButtonElement>("#answer-one .clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {
@@ -296,6 +329,11 @@ describe("Zhihu DOM adapter", () => {
     attachZhihuClapback({ runtime: { generate } });
 
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {
@@ -313,6 +351,11 @@ describe("Zhihu DOM adapter", () => {
     attachZhihuClapback({ runtime: { generate } });
 
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {
@@ -330,6 +373,11 @@ describe("Zhihu DOM adapter", () => {
     attachZhihuClapback({ runtime: { generate } });
 
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {
@@ -358,6 +406,11 @@ describe("Zhihu DOM adapter", () => {
     attachZhihuClapback({ runtime: { generate } });
 
     document.querySelector<HTMLButtonElement>(".clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {
@@ -406,6 +459,11 @@ describe("Zhihu DOM adapter", () => {
     attachZhihuClapback({ runtime: { generate } });
 
     document.querySelector<HTMLButtonElement>("[data-za-detail-view-id='root-1'] .clapback-trigger")?.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector(".clapback-panel")).not.toBeNull();
+    });
+
     document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
 
     await vi.waitFor(() => {

@@ -1,9 +1,9 @@
 import { createRuntimeClient, defaultSettings } from "./runtimeClient";
-import type { ClapbackContext, ClapbackSettings, ClapbackTarget, GenerateRequest, RuntimeClient } from "./types";
+import type { AmmoBoxOption, ClapbackContext, ClapbackSettings, ClapbackTarget, GenerateRequest, RuntimeClient, SkillOption } from "./types";
 import { injectContentStyles } from "./contentStyles";
 import { injectContentFonts } from "./contentFonts";
 import { buildPanel } from "./buildPanel";
-import { hydratePanelOptions, loadPanelOptions } from "./panelOptions";
+import { loadPanelOptions } from "./panelOptions";
 import { placeFloatingPanel } from "./floatingPanel";
 import { showInkLoading, flashSealStage, revealCandidates } from "./generationOverlay";
 
@@ -210,21 +210,20 @@ function ensureTrigger(
   comment.actionRow.append(trigger);
 }
 
-function openPanel(comment: CommentTarget, settings: ClapbackSettings, runtime: RuntimeClient): void {
+async function openPanel(comment: CommentTarget, settings: ClapbackSettings, runtime: RuntimeClient): Promise<void> {
   document.querySelector(".clapback-panel")?.remove();
 
-  const panelSettings = loadPanelOptions(runtime);
+  const { skills, ammoBoxes } = await loadPanelOptions(runtime).catch(() => ({ skills: [] as SkillOption[], ammoBoxes: [] as AmmoBoxOption[] }));
+
   const panel = buildPanel({
     targetText: comment.target.text,
     settings,
+    skills,
+    ammoBoxes,
   });
 
   placeFloatingPanel(panel.root);
   document.body.append(panel.root);
-  void panelSettings.then(({ skills, ammoBoxes }) => {
-    if (!panel.root.isConnected) return;
-    hydratePanelOptions(panel, settings, skills, ammoBoxes);
-  });
 
   panel.generate.addEventListener("click", async () => {
     panel.generate.disabled = true;

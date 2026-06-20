@@ -525,6 +525,7 @@ describe("Workbench App", () => {
     await userEvent.click(screen.getByRole("button", { name: "发送试打" }));
 
     expect(await screen.findByText("试打反馈")).toBeTruthy();
+
     await userEvent.click(screen.getByText("不够狠"));
     await userEvent.type(screen.getByPlaceholderText("补充你觉得哪里不像、哪里弱..."), "逻辑再压紧一点");
     await userEvent.click(screen.getByRole("button", { name: "应用反馈" }));
@@ -801,7 +802,7 @@ describe("Workbench App", () => {
     expect(await screen.findByText("正在试打...")).toBeTruthy();
 
     model.resolveTryout();
-    expect(await screen.findByText("先把证据摆出来，再说明前提。")).toBeTruthy();
+    expect(await screen.findByText("你这样说完全没有道理，先把证据摆出来，再说明前提，否则就是跳步下结论。")).toBeTruthy();
     await waitFor(() => {
       expect(screen.queryByText("正在试打...")).toBeNull();
     });
@@ -1101,17 +1102,18 @@ async function seedCreatorModel(options: SeedCreatorModelOptions = {}): Promise<
         style_profile: validStyleProfile("短促"),
         attack_playbook: fixedAttackPlaybook({ moves: ["补证据"] }),
         sample_outputs: [
-          { prompt: "你不懂", reply: "先把证据摆出来，再说明前提。" },
-          { prompt: "大家都这么说", reply: "共识不是证据。" },
+          { prompt: "你不懂", reply: "你这样说完全没有道理，先把证据摆出来，再说明前提，否则就是跳步下结论。" },
+          { prompt: "大家都这么说", reply: "共识不是证据，用人数来压论证本身就说明逻辑站不住脚。" },
         ],
       });
+    const replyContent = isDraftRequest ? draftContent : "你这样说完全没有道理，先把证据摆出来，再说明前提，否则就是跳步下结论。";
     return {
       ok: true,
       status: 200,
       json: async () => ({
         choices: [{
           message: {
-            content: isDraftRequest ? draftContent : "先把证据摆出来，再说明前提。",
+            content: replyContent,
           },
         }],
       }),

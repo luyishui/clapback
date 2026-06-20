@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Clapback / 嘴替",
   "short_name": "Clapback",
-  "version": "0.1.1",
+  "version": "0.1.4",
   "description": "Lock Zhihu/Weibo/Xiaohongshu comments and generate sharp reply candidates without auto-publishing.",
   "action": {
     "default_title": "Clapback / 嘴替",

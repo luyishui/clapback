@@ -12,7 +12,7 @@ export type LengthConstraint = {
 };
 
 export const CUSTOM_LENGTH_MODE = "自定义";
-export const CUSTOM_LENGTH_DEFAULT_TARGET = 20;
+export const CUSTOM_LENGTH_DEFAULT_TARGET = 50;
 export const CUSTOM_LENGTH_MAX_CHARS = 200;
 
 const PRESET_LENGTH_CONSTRAINTS: Record<string, LengthConstraint> = {

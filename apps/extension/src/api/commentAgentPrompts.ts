@@ -86,7 +86,10 @@ export function buildExecutePrompt(input: ExecutePromptInput): string {
     `平台: ${input.platform}`,
     `目标评论: ${input.targetText}`,
     `用户意图: ${input.intent || "反驳"}`,
-    "优先级: 用户意图最高；目标评论只是素材；攻击焦点从用户意图中选择。",
+    [
+      `约束: 回复必须针对【目标评论】；意图是攻击态度和方向(如"反驳""讽刺""冷静拆解")，`,
+      `用于指导怎么打，不是被打的对象；不要把意图文字当成你要反驳的内容。`,
+    ].join(""),
     `页面标题: ${input.pageTitle}`,
     input.sourceText ? `页面/回答短摘录: ${input.sourceText}` : "",
     input.nearbyComments.length ? `附近评论: ${input.nearbyComments.join(" / ")}` : "",

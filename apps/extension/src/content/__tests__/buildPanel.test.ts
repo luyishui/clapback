@@ -69,7 +69,7 @@ describe("buildPanel", () => {
     expect([...handle.skillSelect.options].map((option) => option.value)).toEqual(["full_fire"]);
     expect(handle.root.querySelector(".clapback-length-select")).toBeNull();
     expect(handle.customLengthInput.hidden).toBe(false);
-    expect(handle.customLengthInput.value).toBe("20");
+    expect(handle.customLengthInput.value).toBe("50");
     expect(handle.ammoSelect.hidden).toBe(true);
     expect([...handle.root.querySelectorAll<HTMLInputElement>(".clapback-ammo-checkbox")].map((option) => option.value)).toEqual(["2"]);
     expect([...handle.root.querySelectorAll<HTMLInputElement>(".clapback-ammo-checkbox:checked")].map((option) => option.value)).toEqual(["2"]);

@@ -2219,7 +2219,7 @@ describe("extension background API handlers", () => {
     expect(prompt).toContain("输出 4 条候选");
     expect(prompt).toContain("每条候选独立一行");
     expect(prompt).toContain("以 1.、2.、3.、4. 开头");
-    expect(prompt).toContain("用户意图是最高优先级");
+    expect(prompt).toContain("意图是攻击态度和方向");
     expect(prompt).not.toContain("/no_think");
     expect(prompt).toContain("系统只采纳前 3 条合格候选");
   });

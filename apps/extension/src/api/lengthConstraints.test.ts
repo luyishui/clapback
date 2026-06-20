@@ -16,7 +16,7 @@ describe("length constraints", () => {
 
     expect(constraint).toMatchObject({ targetChars: 10, minChars: 5, maxChars: 20 });
     expect(constraint.label).toContain("目标 10 个汉字");
-    expect(constraint.label).not.toContain("20");
+    expect(constraint.label).not.toContain("50");
     expect(isWithinLengthConstraint("别急，先把证据拿出来。", constraint)).toBe(true);
   });
 

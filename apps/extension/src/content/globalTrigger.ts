@@ -1,10 +1,12 @@
-import type { ClapbackPlatform, ClapbackSettings, RuntimeClient } from "./types";
+import type { AmmoBoxOption, ClapbackPlatform, ClapbackSettings, RuntimeClient, SkillOption } from "./types";
 import { createRuntimeClient, defaultSettings } from "./runtimeClient";
 import { injectContentStyles } from "./contentStyles";
 import { injectContentFonts } from "./contentFonts";
 import { buildPanel } from "./buildPanel";
-import { hydratePanelOptions, loadPanelOptions } from "./panelOptions";
+import { loadPanelOptions } from "./panelOptions";
 import { showInkLoading, flashSealStage, revealCandidates } from "./generationOverlay";
+
+let globalPanelOpening = false;
 
 export function injectGlobalTrigger(options?: { settings?: Partial<ClapbackSettings> }): void {
   if (document.getElementById("clapback-global-trigger")) return;
@@ -27,17 +29,25 @@ export function injectGlobalTrigger(options?: { settings?: Partial<ClapbackSetti
   document.body.append(trigger);
 }
 
-function openGlobalPanel(settings: ClapbackSettings, runtime: RuntimeClient): void {
-  const existing = document.querySelector(".clapback-global-panel");
+async function openGlobalPanel(settings: ClapbackSettings, runtime: RuntimeClient): Promise<void> {
+  const existing = document.querySelector(".clapback-panel");
   if (existing) {
     existing.remove();
     return;
   }
 
+  if (globalPanelOpening) return;
+  globalPanelOpening = true;
+
+  try {
+    const { skills, ammoBoxes } = await loadPanelOptions(runtime).catch(() => ({ skills: [] as SkillOption[], ammoBoxes: [] as AmmoBoxOption[] }));
+
   const selection = window.getSelection()?.toString().trim();
   const panel = buildPanel({
     targetText: selection || "选中文字或粘贴目标评论",
     settings,
+    skills,
+    ammoBoxes,
   });
   panel.root.classList.add("clapback-global-panel", "clapback-panel--compact");
   panel.intent.rows = 2;
@@ -53,10 +63,6 @@ function openGlobalPanel(settings: ClapbackSettings, runtime: RuntimeClient): vo
 
   panel.root.querySelector(".clapback-panel__target")?.after(targetInput);
   document.body.append(panel.root);
-  void loadPanelOptions(runtime).then(({ skills, ammoBoxes }) => {
-    if (!panel.root.isConnected) return;
-    hydratePanelOptions(panel, settings, skills, ammoBoxes);
-  });
 
   panel.generate.addEventListener("click", async () => {
     const targetText = targetInput.value.trim();
@@ -88,6 +94,9 @@ function openGlobalPanel(settings: ClapbackSettings, runtime: RuntimeClient): vo
   });
 
   targetInput.focus();
+  } finally {
+    globalPanelOpening = false;
+  }
 }
 
 function renderGlobalCandidates(container: HTMLElement, items: string[]): void {
