@@ -176,6 +176,26 @@ describe("extension background API handlers", () => {
     } as chrome.runtime.MessageSender)).rejects.toThrow("message_not_allowed_from_content:skills:delete");
   });
 
+  it("allows content scripts to open the Workbench tab", async () => {
+    const create = vi.fn(async () => ({ id: 88 }));
+    vi.stubGlobal("chrome", {
+      runtime: {
+        id: "extension-id",
+        getURL: (path: string) => `chrome-extension://extension-id/${path}`,
+      },
+      tabs: { create },
+    });
+
+    await expect(handleExtensionMessage({
+      type: "workbench:open",
+    }, {
+      tab: { id: 1, url: "https://www.zhihu.com/question/1" },
+      url: "https://www.zhihu.com/question/1",
+    } as chrome.runtime.MessageSender)).resolves.toBeUndefined();
+
+    expect(create).toHaveBeenCalledWith({ url: "chrome-extension://extension-id/index.html" });
+  });
+
   it("seeds default ammo boxes into extension storage for Workbench and content panels", async () => {
     const boxes = await handleExtensionMessage({ type: "ammo:listBoxes" });
 

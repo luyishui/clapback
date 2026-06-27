@@ -564,6 +564,7 @@ export function CreatorPage({ boxes, initialBoxIds, tryoutRounds, onSkillCreated
               return (
                 <label key={box.id} className="box-check-item">
                   <input
+                    className="workbench-checkbox"
                     type="checkbox"
                     checked={selectedBoxes.has(box.id)}
                     onChange={() => toggleBox(box.id)}

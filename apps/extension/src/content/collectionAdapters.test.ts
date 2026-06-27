@@ -312,8 +312,8 @@ describe("creator collection DOM adapters", () => {
       <main id="Profile-activities" class="ProfileActivities">
         <div class="List-item">
           <div>
-            <div class="ContentItem AnswerItem" data-zop='{"authorName":"秀外慧中贾南风","itemId":"2045258652890793136","title":"《还珠格格》五阿哥永琪到底爱上了小燕子身上的哪些特点？","type":"answer"}'>
-              <h2 class="ContentItem-title">《还珠格格》五阿哥永琪到底爱上了小燕子身上的哪些特点？</h2>
+            <div class="ContentItem AnswerItem" data-zop='{"authorName":"测试作者甲","itemId":"test-answer-0001","title":"测试用回答标题一","type":"answer"}'>
+              <h2 class="ContentItem-title">测试用回答标题一</h2>
               <div class="RichContent-inner">这是他人回答，即使活动状态缺失也不应进入采风篮。</div>
             </div>
           </div>
@@ -336,7 +336,7 @@ describe("creator collection DOM adapters", () => {
       sourceId: "answer-owned",
       text: expect.stringContaining("作者自己的回答"),
     }));
-    expect(items.map((item) => item.text).join("\n")).not.toContain("五阿哥");
+    expect(items.map((item) => item.text).join("\n")).not.toContain("测试用回答标题一");
   });
 
   it("filters Zhihu liked answers when the activity status lives on the outer list item", () => {
@@ -350,8 +350,8 @@ describe("creator collection DOM adapters", () => {
             </div>
           </div>
           <div>
-            <div class="ContentItem AnswerItem" data-zop='{"authorName":"秀外慧中贾南风","itemId":"2045258652890793136","title":"《还珠格格》五阿哥永琪到底爱上了小燕子身上的哪些特点？","type":"answer"}'>
-              <h2 class="ContentItem-title">《还珠格格》五阿哥永琪到底爱上了小燕子身上的哪些特点？</h2>
+            <div class="ContentItem AnswerItem" data-zop='{"authorName":"测试作者甲","itemId":"test-answer-0001","title":"测试用回答标题一","type":"answer"}'>
+              <h2 class="ContentItem-title">测试用回答标题一</h2>
               <div class="RichContent-inner">这是被主页主人赞同的他人回答，不应该进入采风篮。</div>
             </div>
           </div>
@@ -364,7 +364,7 @@ describe("creator collection DOM adapters", () => {
           </div>
           <div>
             <div class="ContentItem ArticleItem" data-za-detail-view-id="article-owned">
-              <a href="https://zhuanlan.zhihu.com/p/570270222">JM101.000 缘起</a>
+              <a href="https://zhuanlan.zhihu.com/p/test-article-1">测试用文章标题一</a>
               <div class="RichContent-inner">这是作者自己的置顶文章。</div>
             </div>
           </div>
@@ -380,7 +380,7 @@ describe("creator collection DOM adapters", () => {
       sourceId: "article-owned",
       text: expect.stringContaining("作者自己的置顶文章"),
     }));
-    expect(items.map((item) => item.text).join("\n")).not.toContain("还珠格格");
+    expect(items.map((item) => item.text).join("\n")).not.toContain("测试用回答标题一");
   });
 
   it("does not use generic Xiaohongshu container ids as source ids", () => {

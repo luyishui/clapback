@@ -188,6 +188,8 @@ export async function handleExtensionMessage<T extends ExtensionMessageType>(
     case "generation:generateCandidates":
     case "generation:generate":
       return generateCandidates(payload as Parameters<typeof generateCandidates>[0]) as Promise<ExtensionRequestMap[T]["response"]>;
+    case "workbench:open":
+      return openWorkbenchTab() as Promise<ExtensionRequestMap[T]["response"]>;
     default:
       throw new Error(`Unknown extension message: ${String(message.type)}`);
   }
@@ -242,6 +244,11 @@ async function openCollectionTab(url: string): Promise<number | undefined> {
   return tab?.id;
 }
 
+async function openWorkbenchTab(): Promise<void> {
+  if (typeof chrome === "undefined" || !chrome.tabs?.create || !chrome.runtime?.getURL) return;
+  await chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
+}
+
 function normalizeCollectionCreatorUrl(platform: "zhihu" | "weibo" | "xiaohongshu", rawUrl: string): string {
   let parsed: URL;
   try {
@@ -266,6 +273,7 @@ const CONTENT_SAFE_MESSAGES = new Set<ExtensionMessageType>([
   "ammo:listBoxes",
   "generation:generateCandidates",
   "generation:generate",
+  "workbench:open",
   "collection:getSessionForTab",
   "collection:addCandidates",
   "collection:listBasket",

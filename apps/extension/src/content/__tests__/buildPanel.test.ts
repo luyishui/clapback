@@ -56,6 +56,24 @@ describe("buildPanel", () => {
     expect(handle.generate.textContent).toContain("生成");
   });
 
+  it("renders an optional Workbench action in the panel header", () => {
+    let opened = false;
+    const handle = buildPanel({
+      targetText: "测试",
+      settings: { activeSkillId: "默认高压嘴替", lengthMode: "短" },
+      onOpenWorkbench: () => {
+        opened = true;
+      },
+    });
+
+    const button = handle.root.querySelector<HTMLButtonElement>(".clapback-panel__workbench");
+    expect(button?.textContent).toContain("工作台");
+
+    button?.click();
+
+    expect(opened).toBe(true);
+  });
+
   it("shows skill, target length, and multi-select ammo controls without duplicate presets", () => {
     const handle = buildPanel({
       targetText: "测试",

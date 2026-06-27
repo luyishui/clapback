@@ -30,20 +30,14 @@ jobs:
       - name: Build extension
         run: npm run build:extension
 
-      - name: Read manifest version
-        id: manifest
-        run: |
-          version=$(node -p "require('./apps/extension/public/manifest.json').version")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
       - name: Package extension
         run: |
           mkdir -p release
           cd apps/extension/dist
-          zip -r "../../../release/clapback-extension-v${{ steps.manifest.outputs.version }}.zip" .
+          zip -r "../../../release/clapback-extension-${{ github.ref_name }}.zip" .
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
-          files: release/clapback-extension-v${{ steps.manifest.outputs.version }}.zip
+          files: release/clapback-extension-${{ github.ref_name }}.zip

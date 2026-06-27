@@ -8,6 +8,9 @@ export const CONTENT_SCRIPT_URL_PATTERNS = [
   "https://www.weibo.com/*",
   "https://m.weibo.cn/*",
   "https://www.xiaohongshu.com/*",
+  "https://www.bilibili.com/*",
+  "https://www.xiaoheihe.cn/*",
+  "https://tieba.baidu.com/*",
 ];
 
 type ContentScriptInjectionApi = {

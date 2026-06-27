@@ -1,7 +1,7 @@
 {
   "name": "clapback",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Clapback / 嘴替: local-first AI comment comeback assistant.",
   "type": "module",
   "workspaces": [

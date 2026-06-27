@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Clapback / 嘴替",
   "short_name": "Clapback",
-  "version": "0.1.4",
-  "description": "Lock Zhihu/Weibo/Xiaohongshu comments and generate sharp reply candidates without auto-publishing.",
+  "version": "0.1.5",
+  "description": "Lock comments on supported Chinese social platforms and generate sharp reply candidates without auto-publishing.",
   "action": {
     "default_title": "Clapback / 嘴替",
     "default_icon": {
@@ -35,6 +35,9 @@
     "https://www.weibo.com/*",
     "https://m.weibo.cn/*",
     "https://www.xiaohongshu.com/*",
+    "https://www.bilibili.com/*",
+    "https://www.xiaoheihe.cn/*",
+    "https://tieba.baidu.com/*",
     "https://api.openai.com/*",
     "https://api.anthropic.com/*",
     "https://api.deepseek.com/*",
@@ -55,7 +58,10 @@
         "https://weibo.com/*",
         "https://www.weibo.com/*",
         "https://m.weibo.cn/*",
-        "https://www.xiaohongshu.com/*"
+        "https://www.xiaohongshu.com/*",
+        "https://www.bilibili.com/*",
+        "https://www.xiaoheihe.cn/*",
+        "https://tieba.baidu.com/*"
       ],
       "js": ["assets/content.js"],
       "run_at": "document_idle"
@@ -70,7 +76,10 @@
         "https://weibo.com/*",
         "https://www.weibo.com/*",
         "https://m.weibo.cn/*",
-        "https://www.xiaohongshu.com/*"
+        "https://www.xiaohongshu.com/*",
+        "https://www.bilibili.com/*",
+        "https://www.xiaoheihe.cn/*",
+        "https://tieba.baidu.com/*"
       ]
     }
   ]

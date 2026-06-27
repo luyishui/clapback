@@ -28,6 +28,7 @@ export type BuildPanelOptions = {
   skills?: SkillOption[];
   ammoBoxes?: AmmoBoxOption[];
   onClose?: () => void;
+  onOpenWorkbench?: () => void;
 };
 
 const PEN_TOOL_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>`;
@@ -44,7 +45,10 @@ export function buildPanel(options: BuildPanelOptions): PanelHandle {
   root.innerHTML = `
     <header class="clapback-panel__header">
       <span class="clapback-panel__brand">嘴替</span>
-      <button class="clapback-panel__close" type="button" aria-label="关闭">×</button>
+      <div class="clapback-panel__header-actions">
+        ${options.onOpenWorkbench ? '<button class="clapback-panel__workbench" type="button">工作台</button>' : ""}
+        <button class="clapback-panel__close" type="button" aria-label="关闭">×</button>
+      </div>
     </header>
     <div class="clapback-panel__target">
       <span class="clapback-panel__target-label">目标已锁定，等待发散...</span>
@@ -97,8 +101,13 @@ export function buildPanel(options: BuildPanelOptions): PanelHandle {
   const ammoSelect = root.querySelector<HTMLSelectElement>(".clapback-ammo-select")!;
   const ammoChecklist = root.querySelector<HTMLElement>(".clapback-ammo-checklist")!;
   const close = root.querySelector<HTMLButtonElement>(".clapback-panel__close")!;
+  const openWorkbench = root.querySelector<HTMLButtonElement>(".clapback-panel__workbench");
 
   bindAmmoChecklist(ammoSelect, ammoChecklist);
+
+  openWorkbench?.addEventListener("click", () => {
+    options.onOpenWorkbench?.();
+  });
 
   close.addEventListener("click", () => {
     root.remove();

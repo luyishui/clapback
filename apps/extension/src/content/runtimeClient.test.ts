@@ -115,4 +115,17 @@ describe("extension content client", () => {
 
     expect(response.candidates).toEqual(["一", "二", "三", "四"]);
   });
+
+  it("opens the Workbench through the background API", async () => {
+    sendMessage.mockResolvedValueOnce({ ok: true, data: undefined });
+
+    const client = createRuntimeClient(defaultSettings);
+
+    await expect(client.openWorkbench?.()).resolves.toBeUndefined();
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      { type: "workbench:open", payload: undefined },
+      expect.any(Function),
+    );
+  });
 });

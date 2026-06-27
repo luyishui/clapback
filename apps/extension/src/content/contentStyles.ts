@@ -79,6 +79,23 @@ const CONTENT_CSS = `
     transform: translateY(-1px);
   }
 
+  .clapback-trigger--stamp {
+    min-height: 0;
+    margin-left: 8px;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    line-height: 1;
+  }
+
+  .clapback-trigger--stamp:hover,
+  .clapback-trigger--stamp:focus-visible {
+    background: transparent;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
   .clapback-panel {
     width: 420px;
     max-width: calc(100vw - 32px);
@@ -109,6 +126,39 @@ const CONTENT_CSS = `
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
+  }
+
+  .clapback-panel__header-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .clapback-panel__workbench {
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--clapback-line-ink);
+    border-radius: 8px;
+    background: rgba(255, 255, 240, 0.72);
+    color: var(--clapback-ink-dense);
+    font-family: "Noto Serif SC", "Microsoft YaHei", serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition:
+      border-color var(--clapback-motion-fast) ease,
+      color var(--clapback-motion-fast) ease,
+      background var(--clapback-motion-fast) ease;
+  }
+
+  .clapback-panel__workbench:hover,
+  .clapback-panel__workbench:focus-visible {
+    border-color: var(--clapback-seal-red);
+    background: var(--clapback-paper-rice);
+    color: var(--clapback-seal-red);
+    outline: none;
   }
 
   .clapback-panel__brand {
@@ -434,6 +484,34 @@ const CONTENT_CSS = `
   }
 
   .clapback-panel__select {
+    appearance: none;
+    width: 100%;
+    min-height: 34px;
+    padding: 6px 28px 6px 8px;
+    border: 1px solid var(--clapback-line-ink);
+    border-radius: 8px;
+    background-color: var(--clapback-paper-ivory);
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--clapback-ink-light) 50%),
+      linear-gradient(135deg, var(--clapback-ink-light) 50%, transparent 50%),
+      linear-gradient(135deg, var(--clapback-paper-ivory), var(--clapback-paper-xuan));
+    background-position:
+      calc(100% - 15px) 50%,
+      calc(100% - 10px) 50%,
+      0 0;
+    background-size:
+      5px 5px,
+      5px 5px,
+      100% 100%;
+    background-repeat: no-repeat;
+    color: var(--clapback-ink-focus);
+    font-family: inherit;
+    font-size: 13px;
+    box-sizing: border-box;
+  }
+
+  .clapback-custom-length {
+    appearance: textfield;
     width: 100%;
     min-height: 34px;
     padding: 6px 8px;
@@ -446,17 +524,10 @@ const CONTENT_CSS = `
     box-sizing: border-box;
   }
 
-  .clapback-custom-length {
-    width: 100%;
-    min-height: 34px;
-    padding: 6px 8px;
-    border: 1px solid var(--clapback-line-ink);
-    border-radius: 8px;
-    background: var(--clapback-paper-ivory);
-    color: var(--clapback-ink-focus);
-    font-family: inherit;
-    font-size: 13px;
-    box-sizing: border-box;
+  .clapback-custom-length::-webkit-inner-spin-button,
+  .clapback-custom-length::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
   }
 
   .clapback-custom-length[hidden] {
@@ -490,8 +561,36 @@ const CONTENT_CSS = `
   }
 
   .clapback-ammo-check input {
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
+    width: 14px;
+    height: 14px;
     margin: 0;
-    accent-color: var(--clapback-seal-red);
+    border: 1px solid var(--clapback-line-ink);
+    border-radius: 4px;
+    background: var(--clapback-paper-xuan);
+    color: var(--clapback-seal-red);
+    flex: 0 0 auto;
+  }
+
+  .clapback-ammo-check input:checked {
+    border-color: var(--clapback-seal-red);
+    background: var(--clapback-seal-red);
+  }
+
+  .clapback-ammo-check input:checked::after {
+    content: "";
+    width: 7px;
+    height: 4px;
+    border: solid #ffffff;
+    border-width: 0 0 2px 2px;
+    transform: rotate(-45deg) translateY(-1px);
+  }
+
+  .clapback-ammo-check input:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(196, 30, 58, 0.14);
   }
 
   .clapback-ammo-check span {

@@ -678,6 +678,7 @@ function ModelConfigModal({
 
       <label className="settings-default-toggle">
         <input
+          className="workbench-checkbox"
           type="checkbox"
           checked={isDefault}
           onChange={(e) => setIsDefault(e.target.checked)}

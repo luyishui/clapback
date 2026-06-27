@@ -18,6 +18,9 @@ export function createRuntimeClient(_settings: ClapbackSettings = defaultSetting
     async generate(request: GenerateRequest): Promise<GenerateResponse> {
       return sendContentMessage("generation:generateCandidates", request);
     },
+    async openWorkbench(): Promise<void> {
+      await sendContentMessage("workbench:open");
+    },
     async listSkills(): Promise<SkillOption[]> {
       const items = await sendContentMessage("skills:list");
       return items

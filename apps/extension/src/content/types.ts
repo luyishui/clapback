@@ -27,7 +27,7 @@ export type AmmoBoxOption = {
   name: string;
 };
 
-export type ClapbackPlatform = "zhihu" | "weibo" | "xiaohongshu" | "unknown";
+export type ClapbackPlatform = "zhihu" | "weibo" | "xiaohongshu" | "bilibili" | "xiaoheihe" | "tieba" | "unknown";
 
 export type GenerateRequest = {
   platform: ClapbackPlatform;
@@ -43,6 +43,7 @@ export type GenerateResponse = {
 
 export type RuntimeClient = {
   generate(request: GenerateRequest): Promise<GenerateResponse>;
+  openWorkbench?(): Promise<void>;
   listSkills?(): Promise<SkillOption[]>;
   listAmmoBoxes?(): Promise<AmmoBoxOption[]>;
 };

@@ -50,6 +50,7 @@ Desktop.ini
 # Local agent/tool state
 .claude/
 .superpowers/
+.playwright-mcp/
 
 # Private planning/reference material not intended for GitHub
 references/
@@ -61,3 +62,9 @@ apps/runtime/
 design.md
 CLAUDE.md
 CONTEXT.md
+
+# Test files: v0.1.5 起新增测试不再推到公开仓库，仅本地运行
+# 已追踪的旧测试保留；新测试文件不会被 git add
+*.test.ts
+*.test.tsx
+**/__tests__/**

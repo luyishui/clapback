@@ -48,6 +48,9 @@ async function openGlobalPanel(settings: ClapbackSettings, runtime: RuntimeClien
     settings,
     skills,
     ammoBoxes,
+    onOpenWorkbench: () => {
+      void runtime.openWorkbench?.();
+    },
   });
   panel.root.classList.add("clapback-global-panel", "clapback-panel--compact");
   panel.intent.rows = 2;
@@ -123,6 +126,9 @@ function detectPlatform(): ClapbackPlatform {
   if (host.includes("zhihu")) return "zhihu";
   if (host.includes("weibo")) return "weibo";
   if (host.includes("xiaohongshu")) return "xiaohongshu";
+  if (host.includes("bilibili")) return "bilibili";
+  if (host.includes("xiaoheihe")) return "xiaoheihe";
+  if (host.includes("tieba.baidu")) return "tieba";
   return "unknown";
 }
 

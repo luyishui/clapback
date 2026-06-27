@@ -69,6 +69,14 @@ describe("background content script recovery", () => {
     }
   });
 
+  it("includes Bilibili, Xiaoheihe, and Baidu Tieba in content script host patterns", () => {
+    expect(CONTENT_SCRIPT_URL_PATTERNS).toEqual(expect.arrayContaining([
+      "https://www.bilibili.com/*",
+      "https://www.xiaoheihe.cn/*",
+      "https://tieba.baidu.com/*",
+    ]));
+  });
+
   it("ships the 嘴替 brand icon assets referenced by the manifest", () => {
     for (const relativePath of [
       "public/icons/icon.svg",

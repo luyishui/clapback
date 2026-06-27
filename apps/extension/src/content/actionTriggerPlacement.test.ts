@@ -4,10 +4,56 @@ import { resolve } from "node:path";
 import { attachWeiboClapback } from "./weiboAdapter";
 import { attachXiaohongshuClapback } from "./xiaohongshuAdapter";
 import { attachZhihuClapback } from "./zhihuAdapter";
+import { attachBilibiliClapback } from "./bilibiliAdapter";
+import { attachXiaoheiheClapback } from "./xiaoheiheAdapter";
+import { attachTiebaClapback } from "./tiebaAdapter";
 import { injectGlobalTrigger } from "./globalTrigger";
 
 function loadDomFixture(name: string): string {
   return readFileSync(resolve(process.cwd(), "../../references/dom html", name), "utf8");
+}
+
+function createBilibiliShadowComment(text: string): {
+  host: HTMLElement;
+  actionShadow: ShadowRoot;
+  replyButton: HTMLButtonElement;
+} {
+  const comments = document.createElement("bili-comments");
+  const commentsShadow = comments.attachShadow({ mode: "open" });
+  const thread = document.createElement("bili-comment-thread-renderer");
+  const threadShadow = thread.attachShadow({ mode: "open" });
+  const host = document.createElement("bili-comment-renderer");
+  host.id = "comment";
+  const hostShadow = host.attachShadow({ mode: "open" });
+
+  const content = document.createElement("div");
+  content.id = "content";
+  const richText = document.createElement("bili-rich-text");
+  const richTextShadow = richText.attachShadow({ mode: "open" });
+  const paragraph = document.createElement("p");
+  paragraph.id = "contents";
+  paragraph.textContent = text;
+  richTextShadow.append(paragraph);
+  content.append(richText);
+
+  const action = document.createElement("bili-comment-action-buttons-renderer");
+  const actionShadow = action.attachShadow({ mode: "open" });
+  const pubdate = document.createElement("div");
+  pubdate.id = "pubdate";
+  pubdate.textContent = "2026-06-22";
+  const reply = document.createElement("div");
+  reply.id = "reply";
+  const replyButton = document.createElement("button");
+  replyButton.textContent = "回复";
+  reply.append(replyButton);
+  actionShadow.append(pubdate, reply);
+
+  hostShadow.append(content, action);
+  threadShadow.append(host);
+  commentsShadow.append(thread);
+  document.body.append(comments);
+
+  return { host, actionShadow, replyButton };
 }
 
 describe("comment action trigger placement", () => {
@@ -640,6 +686,234 @@ describe("comment action trigger placement", () => {
     }));
   });
 
+  it("appends the Bilibili trigger beside a visible comment reply action and generates with Bilibili platform", async () => {
+    const generate = vi.fn().mockResolvedValue({ candidates: ["证据呢？", "先别跳。", "前提呢？"] });
+    document.body.innerHTML = `
+      <div id="commentapp">
+        <div class="reply-item" data-rpid="bili-1">
+          <div class="reply-content">B站评论正文。</div>
+          <div class="reply-info">
+            <span class="reply-btn">回复</span>
+            <span class="like">点赞</span>
+          </div>
+          <textarea class="reply-editor"></textarea>
+        </div>
+      </div>
+    `;
+
+    attachBilibiliClapback({ runtime: { generate } });
+
+    const actionRow = document.querySelector<HTMLElement>(".reply-info")!;
+    expect([...actionRow.children].map((node) => node.textContent?.trim())).toEqual(["回复", "点赞", "嘴替"]);
+
+    document.querySelector<HTMLButtonElement>(".reply-info .clapback-trigger")?.click();
+    await vi.waitFor(() => expect(document.querySelector(".clapback-panel")).not.toBeNull());
+
+    document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
+
+    await vi.waitFor(() => expect(generate).toHaveBeenCalled());
+    expect(generate.mock.calls[0][0]).toEqual(expect.objectContaining({
+      platform: "bilibili",
+      target: expect.objectContaining({ text: "B站评论正文。" }),
+    }));
+
+    const firstCandidate = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLButtonElement>(".clapback-candidate");
+      expect(candidate).not.toBeNull();
+      return candidate!;
+    });
+    firstCandidate.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(document.querySelector<HTMLTextAreaElement>(".reply-editor")?.value).toBe("证据呢？");
+    });
+  });
+
+  it("appends the Bilibili trigger inside the current shadow DOM comment action row", async () => {
+    const generate = vi.fn().mockResolvedValue({ candidates: ["这个判断要先补来源。", "别急，先看证据。", "结论太跳了。"] });
+    const { actionShadow, replyButton } = createBilibiliShadowComment("B站新版 shadow 评论正文。");
+    let nativeReplyClicked = false;
+    replyButton.addEventListener("click", () => {
+      nativeReplyClicked = true;
+      const editor = document.createElement("textarea");
+      editor.className = "reply-editor";
+      document.body.append(editor);
+    });
+
+    attachBilibiliClapback({ runtime: { generate } });
+
+    const trigger = actionShadow.querySelector<HTMLButtonElement>(".clapback-trigger");
+    expect(trigger?.textContent).toBe("嘴替");
+    expect(actionShadow.querySelectorAll(".clapback-trigger")).toHaveLength(1);
+
+    trigger?.click();
+    await vi.waitFor(() => expect(document.querySelector(".clapback-panel")).not.toBeNull());
+    expect(document.querySelector<HTMLElement>(".clapback-panel__target-content")?.textContent?.trim()).toBe("B站新版 shadow 评论正文。");
+
+    document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
+
+    await vi.waitFor(() => expect(generate).toHaveBeenCalled());
+    expect(generate.mock.calls[0][0]).toEqual(expect.objectContaining({
+      platform: "bilibili",
+      target: expect.objectContaining({ text: "B站新版 shadow 评论正文。" }),
+    }));
+
+    const firstCandidate = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLButtonElement>(".clapback-candidate");
+      expect(candidate).not.toBeNull();
+      return candidate!;
+    });
+    firstCandidate.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(nativeReplyClicked).toBe(true);
+      expect(document.querySelector<HTMLTextAreaElement>(".reply-editor")?.value).toBe("这个判断要先补来源。");
+    });
+  });
+
+  it("places Xiaoheihe parent and child reply triggers separately and activates the target before filling", async () => {
+    const generate = vi.fn().mockResolvedValue({ candidates: ["先把链路讲清楚。", "别只贴标签。", "证据在哪？"] });
+    let activatedTarget = "";
+    document.body.innerHTML = `
+      <div class="link-comment">
+        <div class="link-comment__comment-item" data-comment-id="parent-1">
+          <div class="comment-item-content">小黑盒主评论。</div>
+          <div class="comment-item-header__operation-box"><span class="like-box">赞</span></div>
+        </div>
+        <div class="comment-children-item" data-comment-id="child-1">
+          <div class="comment-children-item__content">小黑盒子回复。</div>
+        </div>
+        <div class="link-reply collapse link-comment__reply" data-reply_wrapper="true">
+          <div class="link-reply__editor link-reply__input ProseMirror hb-editor" contenteditable="true"></div>
+        </div>
+      </div>
+    `;
+    document.querySelector<HTMLElement>(".comment-children-item")?.addEventListener("click", () => {
+      activatedTarget = "child-1";
+    });
+
+    attachXiaoheiheClapback({ runtime: { generate } });
+
+    expect(document.querySelector<HTMLElement>(".comment-item-header__operation-box .clapback-trigger")?.textContent).toBe("嘴替");
+    expect(document.querySelector<HTMLElement>(".comment-children-item .clapback-trigger--stamp")?.textContent).toBe("嘴替");
+
+    document.querySelector<HTMLButtonElement>(".comment-children-item .clapback-trigger")?.click();
+    await vi.waitFor(() => expect(document.querySelector(".clapback-panel")).not.toBeNull());
+    expect(document.querySelector<HTMLElement>(".clapback-panel__target-content")?.textContent?.trim()).toBe("小黑盒子回复。");
+    expect(document.querySelector<HTMLElement>(".clapback-panel__target-content")?.textContent).not.toContain("小黑盒主评论");
+
+    document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
+    const firstCandidate = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLButtonElement>(".clapback-candidate");
+      expect(candidate).not.toBeNull();
+      return candidate!;
+    });
+    firstCandidate.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(activatedTarget).toBe("child-1");
+      expect(document.querySelector<HTMLElement>(".link-reply__editor")?.textContent).toBe("先把链路讲清楚。");
+    });
+  });
+
+  it("appends the Tieba trigger to a comment action row and clicks native reply before filling", async () => {
+    const generate = vi.fn().mockResolvedValue({ candidates: ["先补证据。", "前提没立住。", "别急下结论。"] });
+    document.body.innerHTML = `
+      <div class="pb-comment-item" data-comment-id="tieba-1">
+        <div class="comment-content">贴吧评论正文。</div>
+        <div class="pc-pb-comments-desc">
+          <div class="comment-desc-right"><span class="reply">回复</span><span>赞</span></div>
+        </div>
+      </div>
+      <div class="pc-pb-reply-box"><textarea class="box"></textarea></div>
+    `;
+    let nativeReplyClicked = false;
+    document.querySelector<HTMLElement>(".reply")?.addEventListener("click", () => {
+      nativeReplyClicked = true;
+    });
+
+    attachTiebaClapback({ runtime: { generate } });
+
+    const actionRow = document.querySelector<HTMLElement>(".comment-desc-right")!;
+    expect([...actionRow.children].map((node) => node.textContent?.trim())).toEqual(["回复", "赞", "嘴替"]);
+
+    document.querySelector<HTMLButtonElement>(".comment-desc-right .clapback-trigger")?.click();
+    await vi.waitFor(() => expect(document.querySelector(".clapback-panel")).not.toBeNull());
+    expect(document.querySelector<HTMLElement>(".clapback-panel__target-content")?.textContent?.trim()).toBe("贴吧评论正文。");
+
+    document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
+    const firstCandidate = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLButtonElement>(".clapback-candidate");
+      expect(candidate).not.toBeNull();
+      return candidate!;
+    });
+    firstCandidate.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(nativeReplyClicked).toBe(true);
+      expect(document.querySelector<HTMLTextAreaElement>(".pc-pb-reply-box .box")?.value).toBe("先补证据。");
+    });
+  });
+
+  it("appends the Tieba trigger to the main post action bar and fills the thread reply box", async () => {
+    const generate = vi.fn().mockResolvedValue({ candidates: ["先说版本和复现步骤。", "这个要看具体设置。", "别只贴现象。"] });
+    document.body.innerHTML = `
+      <div class="image-text">
+        <div class="pb-title-wrap pc-pb-title pc-pb-title-dark">
+          <h1 class="pb-title">主帖标题：弓箭突然射不远怎么办？</h1>
+        </div>
+        <div class="image-text__content">主帖正文：开新档正常，旧档不正常。</div>
+        <div class="pc-pb-first-floor-interactive">
+          <div class="action-bar-container action-bar">
+            <div class="action-bar-warp">
+              <a class="comment-link-zone" target="_blank">43360</a>
+              <span class="like">3114</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="pc-pb-reply-box"><textarea class="box"></textarea></div>
+    `;
+    let replyBoxFocused = false;
+    document.querySelector<HTMLTextAreaElement>(".pc-pb-reply-box .box")?.addEventListener("focus", () => {
+      replyBoxFocused = true;
+    });
+
+    attachTiebaClapback({ runtime: { generate } });
+
+    const actionRow = document.querySelector<HTMLElement>(".action-bar-warp")!;
+    expect(actionRow.lastElementChild?.textContent?.trim()).toBe("嘴替");
+    expect(actionRow.querySelectorAll(".clapback-trigger")).toHaveLength(1);
+
+    document.querySelector<HTMLButtonElement>(".action-bar-warp .clapback-trigger")?.click();
+    await vi.waitFor(() => expect(document.querySelector(".clapback-panel")).not.toBeNull());
+    expect(document.querySelector<HTMLElement>(".clapback-panel__target-content")?.textContent?.trim()).toBe(
+      "主帖标题：弓箭突然射不远怎么办？ 主帖正文：开新档正常，旧档不正常。",
+    );
+
+    document.querySelector<HTMLButtonElement>(".clapback-generate")?.click();
+
+    await vi.waitFor(() => expect(generate).toHaveBeenCalled());
+    expect(generate.mock.calls[0][0]).toEqual(expect.objectContaining({
+      platform: "tieba",
+      target: expect.objectContaining({
+        text: "主帖标题：弓箭突然射不远怎么办？ 主帖正文：开新档正常，旧档不正常。",
+      }),
+    }));
+
+    const firstCandidate = await vi.waitFor(() => {
+      const candidate = document.querySelector<HTMLButtonElement>(".clapback-candidate");
+      expect(candidate).not.toBeNull();
+      return candidate!;
+    });
+    firstCandidate.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(replyBoxFocused).toBe(true);
+      expect(document.querySelector<HTMLTextAreaElement>(".pc-pb-reply-box .box")?.value).toBe("先说版本和复现步骤。");
+    });
+  });
+
   it("keeps comment triggers compact while preserving the larger global trigger", () => {
     document.body.innerHTML = `
       <div class="CommentItem" data-za-detail-view-id="zhihu-1">
@@ -681,6 +955,9 @@ describe("comment action trigger placement", () => {
       if (message.type === "ammo:listBoxes") {
         return { ok: true, data: [{ id: 7, name: "法律常识" }, { id: 9, name: "热梗" }] };
       }
+      if (message.type === "workbench:open") {
+        return { ok: true, data: undefined };
+      }
       throw new Error(`unexpected message: ${message.type}`);
     });
     vi.stubGlobal(
@@ -717,6 +994,13 @@ describe("comment action trigger placement", () => {
     expect([...ammoChecks].map((option) => option.value)).toEqual(["7", "9"]);
     ammoChecks[1].click();
     expect([...panel.querySelectorAll<HTMLInputElement>(".clapback-ammo-checkbox:checked")].map((item) => item.value)).toEqual(["7", "9"]);
+    const workbench = panel.querySelector<HTMLButtonElement>(".clapback-panel__workbench");
+    expect(workbench?.textContent).toContain("工作台");
+    workbench?.click();
+    expect(sendMessage).toHaveBeenCalledWith(
+      { type: "workbench:open", payload: undefined },
+      expect.any(Function),
+    );
     expect(panel.textContent).not.toContain("技能：");
   });
 

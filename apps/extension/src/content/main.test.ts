@@ -12,6 +12,9 @@ describe("content bootstrap", () => {
       attachZhihuClapback,
       attachWeiboClapback: vi.fn(),
       attachXiaohongshuClapback: vi.fn(),
+      attachBilibiliClapback: vi.fn(),
+      attachXiaoheiheClapback: vi.fn(),
+      attachTiebaClapback: vi.fn(),
       injectGlobalTrigger,
       attachCollectionToolbar,
     });
@@ -20,5 +23,32 @@ describe("content bootstrap", () => {
     expect(attachZhihuClapback).toHaveBeenCalledTimes(1);
     expect(injectGlobalTrigger).toHaveBeenCalledTimes(1);
     expect(attachCollectionToolbar).toHaveBeenCalledTimes(1);
+  });
+
+  it("boots the matching adapter for newly supported reply platforms", () => {
+    const cases = [
+      ["www.bilibili.com", "attachBilibiliClapback"],
+      ["www.xiaoheihe.cn", "attachXiaoheiheClapback"],
+      ["tieba.baidu.com", "attachTiebaClapback"],
+    ] as const;
+
+    for (const [host, expected] of cases) {
+      const deps = {
+        host,
+        attachZhihuClapback: vi.fn(),
+        attachWeiboClapback: vi.fn(),
+        attachXiaohongshuClapback: vi.fn(),
+        attachBilibiliClapback: vi.fn(),
+        attachXiaoheiheClapback: vi.fn(),
+        attachTiebaClapback: vi.fn(),
+        injectGlobalTrigger: vi.fn(),
+        attachCollectionToolbar: vi.fn().mockResolvedValue(undefined),
+      };
+
+      initializeContent(deps);
+
+      expect(deps[expected]).toHaveBeenCalledTimes(1);
+      expect(deps.injectGlobalTrigger).toHaveBeenCalledTimes(1);
+    }
   });
 });

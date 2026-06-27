@@ -141,6 +141,7 @@ export type ExtensionRequestMap = {
   "ammo:deleteBox": { payload: { id: number }; response: void };
   "generation:generateCandidates": { payload: GenerateRequest; response: GenerateResponse };
   "generation:generate": { payload: GenerateRequest; response: GenerateResponse };
+  "workbench:open": { payload: undefined; response: void };
   "extension:health": { payload: undefined; response: ExtensionHealthStatus };
   "extension:checkUpdate": { payload: undefined; response: UpdateCheckResult };
 };
